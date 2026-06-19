@@ -7,10 +7,19 @@
 // live at once without clobbering each other's highlights — and without either
 // adapter needing to know the other exists (DESIGN §7).
 
-const GLYPH = {
-  K: "♔", Q: "♕", R: "♖", B: "♗", N: "♘", P: "♙",
-  k: "♚", q: "♛", r: "♜", b: "♝", n: "♞", p: "♟",
+// FEN piece letter → sprite base name. The uppercase army is White (white-*.png),
+// the lowercase army the Red Queen's side (red-*.png) — matching the two-army
+// palette in style.css. Sprites are served from the client root at /pieces/.
+const PIECE_NAME = {
+  k: "king", q: "queen", r: "rook", b: "bishop", n: "knight", p: "pawn",
 };
+
+function pieceSrc(ch) {
+  const name = PIECE_NAME[ch.toLowerCase()];
+  if (!name) return null;
+  const army = ch === ch.toLowerCase() ? "red" : "white";
+  return `/pieces/${army}-${name}.png`;
+}
 
 const FILES = "abcdefgh";
 
@@ -42,7 +51,7 @@ export class Board {
   onSquareClick(fn) { this.clickHandlers.push(fn); }
   _emitClick(name) { for (const fn of this.clickHandlers) fn(name); }
 
-  // Render piece glyphs from the placement field of a FEN string.
+  // Render piece sprites from the placement field of a FEN string.
   renderPosition(fen) {
     for (const name in this.squares) {
       const sq = this.squares[name];
@@ -55,10 +64,16 @@ export class Board {
       if (ch === "/") { rank--; file = 0; }
       else if (ch >= "1" && ch <= "8") file += +ch;
       else {
-        const span = document.createElement("span");
-        span.className = "piece" + (ch === ch.toLowerCase() ? " black" : "");
-        span.textContent = GLYPH[ch] || "";
-        this.squares[squareName(file, rank)].appendChild(span);
+        const src = pieceSrc(ch);
+        const sq = this.squares[squareName(file, rank)];
+        if (src && sq) {            // skip unknown letters or out-of-range files in a malformed FEN
+          const img = document.createElement("img");
+          img.className = "piece" + (ch === ch.toLowerCase() ? " black" : "");
+          img.src = src;
+          img.alt = ch;
+          img.draggable = false;
+          sq.appendChild(img);
+        }
         file++;
       }
     }

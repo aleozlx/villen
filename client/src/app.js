@@ -97,13 +97,10 @@ function sendMove(move, promotion) {
 }
 
 // ---- Promotion chooser ------------------------------------------------------
-const PROMO_GLYPHS = {
-  white: { queen: "♕", rook: "♖", bishop: "♗", knight: "♘" },
-  black: { queen: "♛", rook: "♜", bishop: "♝", knight: "♞" },
-};
-
+// Same sprites as the board: the promoting side (game.turn) picks its army, so
+// White sees white-*.png and the Red Queen's side red-*.png.
 function choosePromotion(done) {
-  const glyphs = PROMO_GLYPHS[game.turn] || PROMO_GLYPHS.white;
+  const army = game.turn === "white" ? "white" : "red";
   const row = promoEl.querySelector(".promo-row");
   row.innerHTML = "";
   promoEl.classList.remove("hidden");
@@ -115,8 +112,13 @@ function choosePromotion(done) {
   };
   for (const piece of ["queen", "rook", "bishop", "knight"]) {
     const b = document.createElement("button");
-    b.textContent = glyphs[piece];
     b.title = piece;
+    b.setAttribute("aria-label", piece);    // button carries the label…
+    const img = document.createElement("img");
+    img.src = `/pieces/${army}-${piece}.png`;
+    img.alt = "";                            // …so the sprite is presentational (no double announce)
+    img.draggable = false;
+    b.appendChild(img);
     b.addEventListener("click", () => finish(piece));
     row.appendChild(b);
   }
