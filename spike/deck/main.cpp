@@ -162,15 +162,18 @@ int main(int argc, char** argv) {
             ImGui::TableSetupColumn("black");
             ImGui::TableSetupColumn("status");
             ImGui::TableHeadersRow();
-            const char* rows[][4] = {
+            // static: this dummy data is fixed, so build it once rather than
+            // re-allocating the array every frame.
+            static const char* const rows[][4] = {
                 {"game-1", "connected", "open", "white to move"},
                 {"game-2", "connected", "connected", "black to move"},
             };
             for (auto& r : rows) {
                 ImGui::TableNextRow();
                 for (int c = 0; c < 4; ++c) {
-                    ImGui::TableSetColumnIndex(c);
-                    ImGui::TextUnformatted(r[c]);
+                    // TableNextColumn advances and returns false for a clipped
+                    // column, letting us skip drawing cells that aren't visible.
+                    if (ImGui::TableNextColumn()) ImGui::TextUnformatted(r[c]);
                 }
             }
             ImGui::EndTable();
