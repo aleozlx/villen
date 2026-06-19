@@ -40,6 +40,11 @@ JSON-over-WebSocket. The admin UI *is* the server with a face. A single 60 Hz
 loop pumps the network and the UI on one thread, so there is no shared-state
 locking (DESIGN §5).
 
+The in-process admin UI (session/seat table, join URL + QR), reflecting a player
+connected over WebSocket on the same thread:
+
+![Villen admin UI](docs/admin-ui.png)
+
 ## Repository layout
 
 | Path | What |
