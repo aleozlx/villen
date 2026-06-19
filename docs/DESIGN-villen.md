@@ -40,6 +40,8 @@ ONE NATIVE BINARY (on the Deck)
         (SDL2 + GL3 backend; gamepad-navigable)
 ```
 
+![Villen MVP architecture diagram](villen-architecture.svg)
+
 ---
 
 ## 3. Goals (what the MVP must prove)
@@ -157,6 +159,8 @@ Concrete picks so the implementer isn't choosing under ambiguity. All via CMake 
 
 GL/Vulkan enters only as ImGui-backend boilerplate you copy from the example — you author `ImGui::BeginTable(...)`, not graphics code.
 
+**Dependency mechanism (decided).** Dear ImGui enters as a **git submodule** at `third_party/imgui`, pinned to a release tag; the host target compiles its core `.cpp` plus the `imgui_impl_sdl2` / `imgui_impl_opengl3` backends directly. Submodule over vendoring/FetchContent because the Deck never builds (the host is cross-compiled on PC and copied over, §11.1), so the only cost is a one-time `git submodule update --init` in exchange for an exact, automatic version pin. nlohmann/json stays **vendored** as its single header (`third_party/nlohmann/`); SDL2 + OpenGL come from the system via `find_package`.
+
 ---
 
 ## 9. Structures that protect the deferred features
@@ -198,6 +202,8 @@ Steps 1–3 prove the spine; step 4 proves the abstraction; step 6 retires Deck 
 ### 11.1 Where to build, and the Deck-specific risk surface
 
 **Build on PC; deploy to Deck is a recompile-and-copy.** The engine, µWS server, WS contract, browser client, and single-threaded loop are **identical on a PC and a Deck** (both x86-64 glibc Linux) — there is nothing to "port" for ~90% of the system, and PC iteration (real keyboard, debugger, monitor) is strictly faster. Develop steps 1–5 and 7 entirely on PC.
+
+**Recompile-and-copy has one glibc caveat (learned in the step-6 spike).** The copy only works if the *build* glibc is no newer than the Deck's. A bleeding-edge distro (glibc 2.43) binds new symbol versions the Deck's glibc (2.41) does not export, so the binary aborts in the dynamic loader *before* `main()` — it presents as an instant crash with no output. Mitigations, cheapest first: statically link the C++ runtime (`-static-libstdc++ -static-libgcc`); pin any too-new libc symbols back to an older node with a force-included `.symver` shim (the spike needed it for `sqrtf`/`acosf`/`atan2f`, all bumped to `@GLIBC_2.43`); or, most robust, build in a container whose glibc ≤ the Deck's. Sanity-check with `objdump -T <bin> | grep GLIBC_` before copying. (The Deck has no compiler/CMake and a read-only rootfs, so building *on* it is not an option — cross-build is mandatory, not just preferred.)
 
 The **only** parts that can behave differently on the Deck are the four items below. They are all retired by the step-6 spike, done early *because* they are the highest-uncertainty, highest-blast-radius risks — a surprise here can force a redesign, so hit it against throwaway code, not the finished admin UI.
 
