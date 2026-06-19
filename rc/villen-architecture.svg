@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
   <title id="title">Villen MVP architecture</title>
   <desc id="desc">One native C++ host process contains the engine, authoritative session state, WebSocket server, and Dear ImGui admin UI. Remote browser clients connect only through JSON over WebSocket.</desc>
@@ -20,10 +21,10 @@
       .ws { fill: #dbeafe; stroke: #2563eb; }
       .ui { fill: #fce7f3; stroke: #db2777; }
       .browser { fill: #eef2ff; stroke: #4f46e5; }
-      .label { font: 700 24px Inter, Segoe UI, Arial, sans-serif; fill: #0f172a; }
-      .small { font: 500 17px Inter, Segoe UI, Arial, sans-serif; fill: #334155; }
-      .tiny { font: 500 14px Inter, Segoe UI, Arial, sans-serif; fill: #475569; }
-      .caption { font: 600 16px Inter, Segoe UI, Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 24px Inter, 'Segoe UI', Arial, sans-serif; fill: #0f172a; }
+      .small { font: 500 17px Inter, 'Segoe UI', Arial, sans-serif; fill: #334155; }
+      .tiny { font: 500 14px Inter, 'Segoe UI', Arial, sans-serif; fill: #475569; }
+      .caption { font: 600 16px Inter, 'Segoe UI', Arial, sans-serif; fill: #0f172a; }
       .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrow); }
       .blueArrow { stroke: #2563eb; stroke-width: 3; fill: none; marker-end: url(#arrow-blue); }
       .direct { stroke: #db2777; stroke-width: 3; stroke-dasharray: 8 6; fill: none; marker-end: url(#arrow); }

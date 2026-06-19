@@ -40,7 +40,6 @@ ONE NATIVE BINARY (on the Deck)
 
 ![Villen MVP architecture diagram](rc/villen-architecture.svg)
 
-
 ---
 
 ## 3. Goals (what the MVP must prove)
