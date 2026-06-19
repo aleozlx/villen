@@ -7,7 +7,7 @@
 > authoritative game, hosts the session, and serves remote players from their own
 > browsers over the local network. No cloud, no accounts.
 
-The architecture is **not chess-specific**: Villen is a generic host for
+Villen is a generic host for
 deterministic, turn-based, seat-based games. **Chess is the first game** built on
 it — chosen because its rules engine stresses the spine (legality, end states,
 turn order) without distractions. The engine is a swappable slot; the transport,
