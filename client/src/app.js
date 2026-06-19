@@ -36,7 +36,10 @@ const adapters = [
 ];
 
 function onStatus(s) {
-  if (s === "closed") {
+  if (s === "open") {
+    // Claim a seat (server auto-assigns white, then black, else spectator).
+    net.send({ type: "join", session: "default" });
+  } else if (s === "closed") {
     statusEl.textContent = "disconnected — retrying…";
     statusEl.className = "status bad";
   }
@@ -61,6 +64,9 @@ function onMessage(msg) {
     for (const a of adapters) a.reset();
   } else if (msg.type === "sessionUpdate") {
     game.seats = msg.seats || game.seats;
+    renderSeats();
+  } else if (msg.type === "joined") {
+    game.mySeat = msg.seat === "spectator" ? null : msg.seat;
     renderSeats();
   }
 }

@@ -69,6 +69,11 @@ std::string sessionUpdate(const SeatStatus& seats) {
     return msg.dump();
 }
 
+std::string joined(const std::string& session, const std::string& seat) {
+    json msg = {{"type", "joined"}, {"session", session}, {"seat", seat}};
+    return msg.dump();
+}
+
 Incoming parse(std::string_view text) {
     Incoming in;
     json j = json::parse(text, nullptr, /*allow_exceptions=*/false);

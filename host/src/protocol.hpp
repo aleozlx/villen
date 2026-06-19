@@ -33,6 +33,10 @@ std::string reject(const std::string& reason,
 // Seat occupancy changed (player joined/left) without a board change.
 std::string sessionUpdate(const SeatStatus& seats);
 
+// Acknowledge a join, telling the client which seat it holds
+// ("white" | "black" | "spectator") so it can attribute its own moves.
+std::string joined(const std::string& session, const std::string& seat);
+
 // ---- Client -> server -------------------------------------------------------
 
 struct Incoming {
