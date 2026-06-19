@@ -37,8 +37,11 @@ const adapters = [
 
 function onStatus(s) {
   if (s === "open") {
-    // Claim a seat (server auto-assigns white, then black, else spectator).
-    net.send({ type: "join", session: "default" });
+    // Claim a seat. After a transient drop we re-ask for the *same* seat by name,
+    // so the server hands back the seat it held for us (reconnect, DESIGN §13 #1);
+    // on a first connect mySeat is null and the server auto-assigns
+    // white/black/spectator.
+    net.send({ type: "join", session: "default", seat: game.mySeat || "" });
   } else if (s === "closed") {
     statusEl.textContent = "disconnected — retrying…";
     statusEl.className = "status bad";

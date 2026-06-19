@@ -41,22 +41,45 @@ public:
     // Read access for the admin UI (step 7).
     const std::string& sessionName() const { return session_; }
     const chess::Position& position() const { return position_; }
-    bool whiteSeated() const { return whiteConn_ != 0; }
-    bool blackSeated() const { return blackConn_ != 0; }
+    // Per-seat lifecycle state for the admin table: "connected" | "disconnected"
+    // | "open" (DESIGN §13 #1).
+    const char* whiteSeatStatus() const { return statusName(white_); }
+    const char* blackSeatStatus() const { return statusName(black_); }
 
     // Admin action: start a fresh game (used by the ImGui panel later).
     void reset();
+    // Admin action: re-open a seat — the host-mediated "re-issue access" path
+    // (DESIGN §13 #1), e.g. to release a seat a disconnected player left held so
+    // someone can rejoin. Token-free: no credential is revoked, the seat is just
+    // marked open again.
+    void freeSeat(chess::Color c);
 
 private:
+    // A seat is owned by a *connection* but outlives it (§9.3): when a seated
+    // player drops, we keep the seat reserved ("held") rather than vacating it,
+    // so the opponent can't seize it and the player can reconnect into it.
+    //   open         : conn == 0 && !held
+    //   connected    : conn != 0
+    //   disconnected : conn == 0 &&  held
+    struct Seat {
+        ConnId conn = 0;
+        bool held = false;
+    };
+
     net::WsServer& ws_;
     std::string session_ = "default";
     chess::Position position_ = chess::Position::initial();
-    ConnId whiteConn_ = 0;  // 0 == seat open
-    ConnId blackConn_ = 0;
+    Seat white_;
+    Seat black_;
 
+    static const char* statusName(const Seat& s) {
+        return s.conn ? "connected" : (s.held ? "disconnected" : "open");
+    }
+    Seat& seatFor(chess::Color c) {
+        return c == chess::Color::White ? white_ : black_;
+    }
     proto::SeatStatus seatStatus() const {
-        return {whiteConn_ ? "connected" : "open",
-                blackConn_ ? "connected" : "open"};
+        return {statusName(white_), statusName(black_)};
     }
     // The seat this connection occupies: "white", "black", or "" (spectator).
     std::string seatOf(ConnId id) const;
