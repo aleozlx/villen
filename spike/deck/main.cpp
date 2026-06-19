@@ -18,6 +18,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
@@ -49,12 +50,16 @@ int main(int argc, char** argv) {
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         logln("FATAL: SDL_Init: %s", SDL_GetError());
+        if (g_log) std::fclose(g_log);
         return 1;
     }
     logln("SDL video driver: %s", SDL_GetCurrentVideoDriver());
 
-    // Risk #2: enumerate what SDL sees as game controllers under Steam Input.
+    // Risk #2: enumerate AND open what SDL sees as game controllers under Steam
+    // Input. Open them explicitly so controller button events (e.g. Start to
+    // quit) are delivered, rather than relying on the ImGui backend to open them.
     std::string padSummary;
+    std::vector<SDL_GameController*> pads;
     int njoy = SDL_NumJoysticks();
     int npads = 0;
     for (int i = 0; i < njoy; ++i) {
@@ -63,6 +68,7 @@ int main(int argc, char** argv) {
             logln("controller[%d]: %s", i, n ? n : "(unnamed)");
             if (!padSummary.empty()) padSummary += ", ";
             padSummary += (n ? n : "(unnamed)");
+            if (SDL_GameController* pad = SDL_GameControllerOpen(i)) pads.push_back(pad);
             ++npads;
         }
     }
@@ -80,11 +86,18 @@ int main(int argc, char** argv) {
                                        SDL_WINDOWPOS_CENTERED, 1280, 800, flags);
     if (!win) {
         logln("FATAL: SDL_CreateWindow: %s", SDL_GetError());
+        for (auto* p : pads) SDL_GameControllerClose(p);
+        SDL_Quit();
+        if (g_log) std::fclose(g_log);
         return 1;
     }
     SDL_GLContext gl = SDL_GL_CreateContext(win);  // Risk #4
     if (!gl) {
         logln("FATAL: SDL_GL_CreateContext: %s", SDL_GetError());
+        SDL_DestroyWindow(win);
+        for (auto* p : pads) SDL_GameControllerClose(p);
+        SDL_Quit();
+        if (g_log) std::fclose(g_log);
         return 1;
     }
     SDL_GL_MakeCurrent(win, gl);
@@ -188,6 +201,7 @@ int main(int argc, char** argv) {
     ImGui::DestroyContext();
     SDL_GL_DeleteContext(gl);
     SDL_DestroyWindow(win);
+    for (auto* p : pads) SDL_GameControllerClose(p);
     SDL_Quit();
     if (g_log) std::fclose(g_log);
     return 0;

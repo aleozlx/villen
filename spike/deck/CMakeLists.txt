@@ -28,8 +28,8 @@ add_executable(deck_spike
     ${IMGUI}/backends/imgui_impl_sdl2.cpp
     ${IMGUI}/backends/imgui_impl_opengl3.cpp
 )
-target_include_directories(deck_spike PRIVATE ${IMGUI} ${IMGUI}/backends ${SDL2_INCLUDE_DIRS})
-target_link_libraries(deck_spike PRIVATE ${SDL2_LIBRARIES} OpenGL::GL ${CMAKE_DL_LIBS})
+target_include_directories(deck_spike PRIVATE ${IMGUI} ${IMGUI}/backends)
+target_link_libraries(deck_spike PRIVATE SDL2::SDL2 OpenGL::GL ${CMAKE_DL_LIBS})
 target_link_options(deck_spike PRIVATE -static-libstdc++ -static-libgcc)
 # Pin glibc-2.43-re-versioned math symbols back to the 2.2.5 node so the binary
 # loads on the Deck's older glibc (2.41). Force-included into every TU.
