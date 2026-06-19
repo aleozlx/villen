@@ -56,11 +56,18 @@ h1 { font-size: 1.4rem; margin: 0.2rem 0; letter-spacing: 0.04em; }
 .square.light { background: var(--light); }
 .square.dark { background: var(--dark); }
 
-/* Two armies (Looking-Glass): White's pieces are white, the Red Queen's side is
-   red. Both carry a dark outline so they stay legible on every square colour —
-   white-on-white and red-on-red would otherwise vanish. */
-.piece { color: #fbfbfb; text-shadow: 0 0 2px #000, 0 0 3px rgba(0, 0, 0, 0.75), 0 1px 2px #000; }
-.piece.black { color: #e23b3b; text-shadow: 0 0 2px #000, 0 0 3px rgba(0, 0, 0, 0.6), 0 1px 2px #000; }
+/* Two armies (Looking-Glass): White's army uses the white-*.png sprites, the Red
+   Queen's side the red-*.png ones. The sprite art carries its own colour, so no
+   text outline; a soft drop-shadow lifts each piece off the square beneath it. */
+.piece {
+  width: 86%;
+  height: 86%;
+  object-fit: contain;
+  pointer-events: none;            /* clicks fall through to the .square */
+  -webkit-user-drag: none;
+  user-select: none;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45));
+}
 
 .square.sel { background: var(--sel) !important; }
 .square.check { box-shadow: inset 0 0 0 4px var(--check); }
@@ -148,12 +155,13 @@ footer { font-size: 0.9rem; opacity: 0.92; }
 .promo.hidden { display: none; }
 .promo-row { display: flex; gap: 0.5rem; background: #34322e; padding: 1rem; border-radius: 8px; }
 .promo-row button {
-  font-size: 3rem;
-  width: 1.6em;
-  height: 1.6em;
+  width: 5rem;
+  height: 5rem;
+  padding: 0.45rem;
   border: 2px solid transparent;
   border-radius: 6px;
-  background: var(--light);
+  background: var(--dark);         /* mid-grey so both white and red sprites read */
   cursor: pointer;
 }
+.promo-row button img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .promo-row button.active { border-color: var(--cursor); }
