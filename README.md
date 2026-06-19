@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/aleozlx/villen/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleozlx/villen/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Steam Deck](https://img.shields.io/badge/Steam_Deck-supported-1A9FFF?logo=steamdeck&logoColor=white)](docs/steamdeck-debugging.md)
 
 ![Villen — portable game server](rc/readme-banner-1280x320.png)
 
@@ -32,9 +33,17 @@ that state directly — no admin socket, no IPC. Chess is the first engine, not
 the limit of the architecture.
 
 The only network boundary is **remote players' browsers**, speaking
-JSON-over-WebSocket. The admin UI *is* the server with a face. A single 60 Hz
-loop pumps the network and the UI on one thread, so there is no shared-state
-locking (DESIGN §5).
+JSON-over-WebSocket. The admin UI *is* the server with a face — an **operator**
+console, not something a game author programs against. A single 60 Hz loop pumps
+the network and the UI on one thread, so there is no shared-state locking
+(DESIGN §5).
+
+> **Where this is heading:** chess is compiled *into* the host today, but the
+> "engine slot" inverts — Villen becomes a **library a single game depends on**.
+> A future game (Snake, a card game, …) carries Villen as a submodule for rooms,
+> seats, and serving, and supplies only the rules + client against a small
+> `IGame` contract; one game type per binary, no IPC. See
+> [`docs/DESIGN-game-framework.md`](docs/DESIGN-game-framework.md).
 
 The in-process admin UI (session/seat table, join URL + QR), reflecting a player
 connected over WebSocket on the same thread:
@@ -49,7 +58,7 @@ connected over WebSocket on the same thread:
 | `tests/`  | doctest suite (perft + special-rule coverage). |
 | `host/`   | The native binary: WS server + in-process ImGui admin UI. |
 | `client/` | Browser player client (pointer **and** gamepad input adapters). |
-| `docs/`   | Design & handoff doc, architecture diagram, Steam Deck debugging guide, art brief. |
+| `docs/`   | Design & handoff doc, [game-framework contract](docs/DESIGN-game-framework.md), architecture diagram, Steam Deck debugging guide, art brief. |
 | `spike/`  | Throwaway Deck smoke-spike sources, kept as the seed for Step 7's diagnostics window. |
 
 ## Build
@@ -103,31 +112,6 @@ can move with the mouse **or** a gamepad interchangeably.
 | `--port N` | TCP port for the player WebSocket + HTTP client (default 9002). |
 | `--headless` | Run the server loop without opening the admin window. |
 | `--client-dir DIR` | Serve the browser client from `DIR` (defaults to the source tree). |
-
-## MVP build order (DESIGN §11)
-
-- [x] **1.** Pure chess engine, standalone + unit tests (perft-validated)
-- [x] **2.** WebSocket server in a bare main loop (one hardcoded session)
-- [x] **3.** Browser player client, pointer input
-- [x] **4.** Gamepad adapter into the same move intake (architectural milestone, §7)
-- [x] **5.** Seats + two browsers, turn enforcement, rejection path
-- [x] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
-- [x] **7.** ImGui admin shell in the same binary
-
-> **Transport note:** the design names µWebSockets as the player transport. The
-> server here is a small, self-contained RFC 6455 implementation driven by the
-> single main-loop `poll()` (DESIGN §5), kept behind a poll-shaped seam so µWS
-> can drop in later without touching the engine or session layers (§9.5).
-> Performance is a non-issue at LAN/chess message volume.
-
-## Beyond the MVP
-
-Increments past the load-bearing spine (DESIGN §13):
-
-- [x] **Reconnection & seat lifecycle** — a dropped player's seat is *held*
-  (`disconnected`) instead of vacated, so a mid-game drop never hands the side to
-  the opponent. Token-free recovery: a transient drop reclaims the seat by name,
-  or the host re-opens it from the admin UI's per-seat **Free** control (§13 #1).
 
 ## License
 
