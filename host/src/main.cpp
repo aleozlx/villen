@@ -13,6 +13,9 @@
 #include "net_util.hpp"
 #include "session.hpp"
 #include "ws_server.hpp"
+#ifdef VILLEN_ADMIN_UI
+#include "admin_ui.hpp"
+#endif
 
 namespace {
 volatile std::sig_atomic_t g_running = 1;
@@ -21,6 +24,9 @@ void onSignal(int) { g_running = 0; }
 
 int main(int argc, char** argv) {
     std::uint16_t port = 9002;
+    bool headless = false;
+    int screenshotDelayMs = -1;
+    const char* screenshotPath = nullptr;
 #ifdef VILLEN_DEFAULT_CLIENT_DIR
     std::string clientDir = VILLEN_DEFAULT_CLIENT_DIR;
 #else
@@ -31,6 +37,12 @@ int main(int argc, char** argv) {
             port = static_cast<std::uint16_t>(std::atoi(argv[++i]));
         else if (std::strcmp(argv[i], "--client-dir") == 0 && i + 1 < argc)
             clientDir = argv[++i];
+        else if (std::strcmp(argv[i], "--headless") == 0)
+            headless = true;
+        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
+            screenshotPath = argv[++i];
+            screenshotDelayMs = 2500;  // settle, let a test client connect/move
+        }
     }
 
     villen::net::WsServer ws;
@@ -56,6 +68,24 @@ int main(int argc, char** argv) {
     for (const auto& ip : ips) std::printf("  http://%s:%u\n", ip.c_str(), port);
     std::printf("(serving client from %s; Ctrl-C to stop)\n", clientDir.c_str());
     std::fflush(stdout);
+
+#ifdef VILLEN_ADMIN_UI
+    // Only attempt the admin window when a display server is actually present
+    // (the Deck in Game Mode has one); otherwise SDL would stall probing for one
+    // on a headless box. The window loop pumps ws.poll() itself (§5).
+    bool hasDisplay = std::getenv("DISPLAY") || std::getenv("WAYLAND_DISPLAY");
+    if (!headless && hasDisplay &&
+        villen::admin::runAdminLoop(game, ws, &g_running, screenshotDelayMs,
+                                    screenshotPath)) {
+        std::printf("\nvillen: shutting down\n");
+        return 0;
+    }
+    std::printf("villen: running headless (no admin window)\n");
+    std::fflush(stdout);
+#else
+    (void)screenshotDelayMs;
+    (void)screenshotPath;
+#endif
 
     while (g_running) ws.poll(100);
 

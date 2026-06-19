@@ -40,6 +40,11 @@ JSON-over-WebSocket. The admin UI *is* the server with a face. A single 60 Hz
 loop pumps the network and the UI on one thread, so there is no shared-state
 locking (DESIGN §5).
 
+The in-process admin UI (session/seat table, join URL + QR), reflecting a player
+connected over WebSocket on the same thread:
+
+![Villen admin UI](docs/admin-ui.png)
+
 ## Repository layout
 
 | Path | What |
@@ -74,17 +79,40 @@ cmake --build build && ctest --test-dir build
 | CMake option | Default | Effect |
 |---|---|---|
 | `VILLEN_BUILD_TESTS` | `ON` | Build and register the engine unit tests. |
-| `VILLEN_BUILD_HOST`  | `ON` | Build the native host (needs SDL2 + OpenGL; fetches uWebSockets). |
+| `VILLEN_BUILD_HOST`  | `ON` | Build the native host. Uses SDL2 + OpenGL + Dear ImGui for the admin UI; degrades to a server-only host if SDL2/OpenGL are absent. |
+
+## Run
+
+```bash
+./build/host/villen --port 9002        # opens the admin window if a display exists
+./build/host/villen --port 9002 --headless   # server only (no window)
+```
+
+Then open `http://<host-ip>:9002` in a browser (the admin window shows the URL
+and a QR code). Two browsers can each claim a seat and play; on one browser you
+can move with the mouse **or** a gamepad interchangeably.
+
+| Flag | Effect |
+|---|---|
+| `--port N` | TCP port for the player WebSocket + HTTP client (default 9002). |
+| `--headless` | Run the server loop without opening the admin window. |
+| `--client-dir DIR` | Serve the browser client from `DIR` (defaults to the source tree). |
 
 ## MVP build order (DESIGN §11)
 
-- [x] **1.** Pure chess engine, standalone + unit tests
-- [ ] **2.** µWS server in a bare main loop (one hardcoded session)
-- [ ] **3.** Browser player client, pointer-only
-- [ ] **4.** Gamepad adapter into the same move intake (architectural milestone, §7)
-- [ ] **5.** Seats + two browsers, turn enforcement, rejection path
+- [x] **1.** Pure chess engine, standalone + unit tests (perft-validated)
+- [x] **2.** WebSocket server in a bare main loop (one hardcoded session)
+- [x] **3.** Browser player client, pointer input
+- [x] **4.** Gamepad adapter into the same move intake (architectural milestone, §7)
+- [x] **5.** Seats + two browsers, turn enforcement, rejection path
 - [x] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
-- [ ] **7.** ImGui admin shell in the same binary
+- [x] **7.** ImGui admin shell in the same binary
+
+> **Transport note:** the design names µWebSockets as the player transport. The
+> server here is a small, self-contained RFC 6455 implementation driven by the
+> single main-loop `poll()` (DESIGN §5), kept behind a poll-shaped seam so µWS
+> can drop in later without touching the engine or session layers (§9.5).
+> Performance is a non-issue at LAN/chess message volume.
 
 ## License
 
