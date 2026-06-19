@@ -48,11 +48,13 @@ confidence. **Not** loud, not busy, not "gamer-RGB."
 Two-tone-plus-accent; avoid rainbow gradients.
 
 ### Typography (wordmark)
-- Clean geometric or humanist **grotesk**, medium weight, slightly condensed.
-- One subtle "disguise" detail in the wordmark — a single scale, a small wing
-  serif, or a notch — that you only notice on a second look. Otherwise plain.
-- All-lowercase "villen" reads calmer; title-case "Villen" reads more product.
-  Provide both if generating the logo.
+- Refined, original **high-contrast serif** with a restrained dark-fantasy /
+  medieval-book-cover feeling: slightly tall proportions and delicate pointed
+  serifs, not a reproduction of any franchise title treatment.
+- Deep crimson red (`#B51F2C`, with optional darker-red depth) distinguishes the
+  wordmark from the charcoal artwork. Keep it elegant rather than ornate.
+- All-lowercase **"villen"**; one subtle disguise detail is enough. Otherwise
+  let the type stay calm and highly legible.
 
 ### Style
 - Flat-with-depth / modern vector poster feel; subtle grain or soft rim-light ok.
@@ -68,8 +70,9 @@ Two-tone-plus-accent; avoid rainbow gradients.
 | Wordmark / logo | square + wide, **transparent PNG** | with and without the dragon mark |
 | App / library icon | 512×512, 256×256 | strong silhouette, works tiny |
 | Vertical cover ("capsule") | 600×900 | portrait key art + wordmark |
-| Header / banner | 460×215 and **1280×640** | wide; 1280×640 doubles as the GitHub social banner |
-| Hero / page background | 1920×620 | wide cinematic, wordmark off-center, lots of negative space |
+| Header / banner | **920×430** and **1280×640** | 920×430 is the native Steam Library header; 1280×640 doubles as the GitHub social banner |
+| Hero / page background | **3840×1240** (Steam), 1920×620 (compatibility) | wide cinematic; the native Steam hero must contain no text because Steam layers the logo on top |
+| Steam library logo | 1280px wide, transparent PNG | wordmark and optional mark only; no extra copy |
 | README banner | 1280×320 (or reuse 1280×640) | slim top-of-readme strip |
 
 Generate at 2× and downscale for crisp small sizes.
@@ -103,19 +106,59 @@ rc/banner-1280x640.png      # also the GitHub social banner
 rc/header-460x215.png
 rc/hero-1920x620.png
 rc/readme-banner-1280x320.png
+rc/steam-library-header-920x430.png
+rc/steam-library-hero-3840x1240.png
+rc/steam-library-logo-1280w.png
 ```
 
 ---
 
-## 6. Ready-to-paste prompts
+## 6. Use the art in the Steam library (non-Steam shortcut)
+
+This is for a **local non-Steam game** already added to the Deck's library; it
+does not publish anything to Steamworks. The custom artwork stays with that
+Steam client/account, so keep the canonical files in `rc/` and copy a set to
+the Deck when needed:
+
+```bash
+# Run from the repository on the build PC.
+ssh deck@<deck-ip> 'mkdir -p /home/deck/Villen/art'
+scp rc/cover-capsule-600x900.png rc/steam-library-hero-3840x1240.png \
+    rc/steam-library-header-920x430.png rc/steam-library-logo-1280w.png \
+    deck@<deck-ip>:/home/deck/Villen/art/
+```
+
+In **Desktop Mode**, open Steam's Library and find the Villen non-Steam entry.
+Steam's labels vary slightly by client version, but the artwork controls are
+available from the game's right-click menu (**Manage** → **Set Custom Artwork**)
+and from the library details/header area (right-click it to set a custom
+background or logo).
+
+| Steam surface | File to select | What to do |
+|---|---|---|
+| Grid / collection tile | `cover-capsule-600x900.png` | Set this first via **Set Custom Artwork**. It is the portrait image seen in collections and at small sizes. |
+| Details-page background / hero | `steam-library-hero-3840x1240.png` | Set as the custom background. It intentionally contains **no text**; Steam layers the logo on top. |
+| Details-page logo | `steam-library-logo-1280w.png` | Set as the custom logo. It is a transparent PNG, so it can sit over the hero. |
+| Header / Recent Games artwork | `steam-library-header-920x430.png` | Use where the client presents a header-art picker; it carries the title and matches the grid art. |
+
+Do not use the old half-size `hero-1920x620.png` or `header-460x215.png` for
+the custom-art upload when the native Steam versions above are available; they
+exist for the README and other compatibility uses. If a new image does not
+appear immediately, return to the Library view or restart Steam once—the client
+can retain a thumbnail in memory.
+
+---
+
+## 7. Ready-to-paste prompts
 
 **Logo / wordmark**
-> Minimal vector logo for a software project called "Villen". A clean geometric
-> grotesk lowercase wordmark "villen" in off-white, paired with a small original
-> mark: a coiled dragon hidden inside a plain handheld-device silhouette,
-> readable as both. One subtle scale detail worked into a letter. Palette: deep
-> charcoal background with a single warm ember accent. Flat, premium, lots of
-> negative space, transparent background. No existing franchise or brand marks.
+> Minimal vector logo for a software project called "Villen". A clean lowercase
+> wordmark "villen" in deep crimson, using an original refined
+> high-contrast serif with delicate pointed serifs and quiet dark-fantasy
+> gravitas, paired with a small original mark: a coiled dragon hidden inside a
+> plain handheld-device silhouette, readable as both. Palette: deep charcoal
+> with a single warm ember accent. Flat, premium, lots of negative space,
+> transparent background. Do not reproduce any franchise or brand mark.
 
 **Vertical cover (600×900)**
 > Portrait key art, 600×900, for "Villen", a portable game host. Central image: a
@@ -123,17 +166,17 @@ rc/readme-banner-1280x320.png
 > original dragon revealed coiled behind/within it and faint ember glow leaking
 > through. A faint chessboard recedes below; a knight piece echoes the dragon's
 > wing. Charcoal/graphite palette with one ember accent. Understated, mythic,
-> premium poster style, strong silhouette, generous negative space, wordmark
-> "villen" lower third. Original art only — no real products, logos, or franchise
-> characters.
+> premium poster style, strong silhouette, generous negative space, deep-crimson
+> serif wordmark "villen" in the lower third. Original art only — no real
+> products, logos, or franchise characters.
 
 **Wide banner / social (1280×640)**
 > Wide cinematic banner, 1280×640, for "Villen". Off-center: an invented handheld
 > casting a large dragon-shaped shadow across a dark surface, faint short-range
 > signal arcs reaching small browser/phone glyphs (players on a local network).
 > Two-tone slate palette with a single ember (or emerald) accent. Calm, premium,
-> lots of empty space on the wordmark side; place "villen" wordmark left. Flat
-> vector-with-depth, no franchise or brand marks.
+> lots of empty space on the wordmark side; place the deep-crimson serif
+> "villen" wordmark left. Flat vector-with-depth, no franchise or brand marks.
 
 Adjust palette line per §2 (A or B). Keep the *same* dragon and wordmark across
 every prompt for consistency.
