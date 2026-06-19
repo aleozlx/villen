@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880" role="img" aria-labelledby="title desc">
+  <title id="title">Villen future architecture</title>
+  <desc id="desc">A portable Villen host contains pluggable game engines, authoritative sessions, a player gateway, a native host console, and local runtime services. Browsers join a local room through the player gateway; the host remains the sole authority.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#11151b"/>
+      <stop offset="1" stop-color="#1d222b"/>
+    </linearGradient>
+    <linearGradient id="host" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#202833"/>
+      <stop offset="1" stop-color="#182029"/>
+    </linearGradient>
+    <linearGradient id="engine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#39242a"/>
+      <stop offset="1" stop-color="#251d24"/>
+    </linearGradient>
+    <linearGradient id="authority" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#19333a"/>
+      <stop offset="1" stop-color="#17272e"/>
+    </linearGradient>
+    <linearGradient id="client" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#232b40"/>
+      <stop offset="1" stop-color="#1c2232"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#05070a" flood-opacity="0.5"/>
+    </filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L10,5.5 L1,10 Z" fill="#8b9aaa"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L10,5.5 L1,10 Z" fill="#d1444e"/>
+    </marker>
+    <marker id="arrow-teal" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M1,1 L10,5.5 L1,10 Z" fill="#49b3ad"/>
+    </marker>
+    <style>
+      .title { font: 700 31px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f5f1ea; letter-spacing: .2px; }
+      .subtitle { font: 400 17px Inter, ui-sans-serif, system-ui, sans-serif; fill: #aab5c1; }
+      .kicker { font: 700 13px Inter, ui-sans-serif, system-ui, sans-serif; fill: #e2603b; letter-spacing: 1.6px; text-transform: uppercase; }
+      .group { font: 700 20px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f5f1ea; }
+      .box-title { font: 700 18px Inter, ui-sans-serif, system-ui, sans-serif; fill: #f5f1ea; }
+      .box-copy { font: 400 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #b9c3cf; }
+      .box-meta { font: 600 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #7fd0c8; letter-spacing: .5px; }
+      .tiny { font: 500 12px Inter, ui-sans-serif, system-ui, sans-serif; fill: #91a0af; }
+      .note { font: 600 14px Inter, ui-sans-serif, system-ui, sans-serif; fill: #d5dde5; }
+      .host-frame { fill: url(#host); stroke: #4a5a69; stroke-width: 2; }
+      .engine-box { fill: url(#engine); stroke: #d1444e; stroke-width: 2; }
+      .authority-box { fill: url(#authority); stroke: #49b3ad; stroke-width: 2; }
+      .system-box { fill: #202936; stroke: #748396; stroke-width: 1.5; }
+      .client-box { fill: url(#client); stroke: #7181c8; stroke-width: 2; }
+      .future-box { fill: #1c222c; stroke: #5c6a78; stroke-width: 1.5; stroke-dasharray: 7 6; }
+      .line { fill: none; stroke: #8b9aaa; stroke-width: 2.5; marker-end: url(#arrow); }
+      .line-red { fill: none; stroke: #d1444e; stroke-width: 2.7; marker-end: url(#arrow-red); }
+      .line-teal { fill: none; stroke: #49b3ad; stroke-width: 2.7; marker-end: url(#arrow-teal); }
+      .boundary { fill: none; stroke: #596978; stroke-width: 1.5; stroke-dasharray: 8 8; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="880" rx="28" fill="url(#bg)"/>
+  <path d="M0 758 C230 692 367 858 646 790 S1088 705 1400 805 L1400 880 L0 880 Z" fill="#141a22" opacity=".76"/>
+  <circle cx="1290" cy="114" r="150" fill="#e2603b" opacity=".035" filter="url(#glow)"/>
+  <circle cx="84" cy="770" r="190" fill="#49b3ad" opacity=".025" filter="url(#glow)"/>
+
+  <text x="70" y="66" class="kicker">Future-facing system view</text>
+  <text x="70" y="108" class="title">Villen — a portable authority for local game rooms</text>
+  <text x="70" y="139" class="subtitle">One host carries the game, owns the truth, and brings every nearby browser into the same room.</text>
+
+  <rect x="70" y="190" width="835" height="572" rx="26" class="host-frame" filter="url(#shadow)"/>
+  <text x="108" y="231" class="kicker">Portable host</text>
+  <text x="108" y="263" class="group">Villen native runtime</text>
+  <text x="108" y="287" class="tiny">Steam Deck, laptop, or any small Linux host</text>
+
+  <rect x="110" y="324" width="315" height="154" rx="17" class="engine-box" filter="url(#shadow)"/>
+  <text x="136" y="360" class="box-meta" fill="#ef7a70">PLUG-IN SLOT</text>
+  <text x="136" y="390" class="box-title">Game Engine</text>
+  <text x="136" y="416" class="box-copy">Pure deterministic rules, state,</text>
+  <text x="136" y="437" class="box-copy">and legality. Chess is first.</text>
+  <text x="136" y="461" class="tiny">No sockets • no graphics • no device code</text>
+
+  <rect x="510" y="324" width="350" height="154" rx="17" class="authority-box" filter="url(#shadow)"/>
+  <text x="536" y="360" class="box-meta">SOLE AUTHORITY</text>
+  <text x="536" y="390" class="box-title">Session &amp; Game Authority</text>
+  <text x="536" y="416" class="box-copy">Rooms, seats, turns, lifecycle,</text>
+  <text x="536" y="437" class="box-copy">validation, state fan-out.</text>
+  <text x="536" y="461" class="tiny">The only layer allowed to commit a move</text>
+
+  <rect x="110" y="555" width="315" height="150" rx="17" class="system-box" filter="url(#shadow)"/>
+  <text x="136" y="589" class="box-meta">LOCAL CONTROL PLANE</text>
+  <text x="136" y="618" class="box-title">Native Host Console</text>
+  <text x="136" y="644" class="box-copy">Create rooms, manage seats,</text>
+  <text x="136" y="665" class="box-copy">show join links and diagnostics.</text>
+  <text x="136" y="689" class="tiny">Gamepad-friendly • direct in-process access</text>
+
+  <rect x="510" y="555" width="350" height="150" rx="17" class="system-box" filter="url(#shadow)"/>
+  <text x="536" y="589" class="box-meta">PLAYER EDGE</text>
+  <text x="536" y="618" class="box-title">Player Gateway</text>
+  <text x="536" y="644" class="box-copy">HTTP client delivery + JSON/WebSocket</text>
+  <text x="536" y="665" class="box-copy">protocol, reconnection, state updates.</text>
+  <text x="536" y="689" class="tiny">One network boundary; no client authority</text>
+
+  <path d="M425 401 L510 401" class="line-red"/>
+  <text x="467" y="383" text-anchor="middle" class="tiny">rules + state</text>
+  <path d="M685 478 L685 555" class="line-teal"/>
+  <text x="703" y="524" class="tiny">accept / broadcast</text>
+  <path d="M425 630 L510 630" class="line"/>
+  <text x="468" y="613" text-anchor="middle" class="tiny">manage rooms</text>
+  <path d="M584 555 C530 520 490 490 400 478" class="line"/>
+  <text x="445" y="523" text-anchor="middle" class="tiny">observe / administer</text>
+
+  <line x1="955" y1="184" x2="955" y2="771" class="boundary"/>
+  <text x="973" y="207" class="tiny">local network boundary</text>
+
+  <rect x="1015" y="268" width="305" height="157" rx="18" class="client-box" filter="url(#shadow)"/>
+  <text x="1042" y="305" class="box-meta" fill="#a9b6ff">REMOTE PLAYERS</text>
+  <text x="1042" y="335" class="box-title">Browser Game Client</text>
+  <text x="1042" y="361" class="box-copy">Touch, mouse, keyboard, or gamepad</text>
+  <text x="1042" y="382" class="box-copy">feed the same game interaction model.</text>
+  <text x="1042" y="407" class="tiny">Phone • laptop • desktop browser</text>
+
+  <rect x="1015" y="526" width="305" height="149" rx="18" class="future-box"/>
+  <text x="1042" y="562" class="box-meta" fill="#aab5c1">EXPANSION SEAM</text>
+  <text x="1042" y="592" class="box-title">More games, same room</text>
+  <text x="1042" y="618" class="box-copy">Additional deterministic engines,</text>
+  <text x="1042" y="639" class="box-copy">rulesets, and player experiences.</text>
+  <text x="1042" y="663" class="tiny">The host/session/network spine stays stable</text>
+
+  <path d="M860 622 C930 622 950 345 1015 345" class="line-teal"/>
+  <text x="929" y="472" text-anchor="middle" class="tiny">join • intent • state</text>
+  <path d="M1168 425 L1168 526" class="line"/>
+  <text x="1190" y="484" class="tiny">reusable client contract</text>
+
+  <rect x="110" y="790" width="1210" height="52" rx="13" fill="#181f28" stroke="#374553" stroke-width="1"/>
+  <circle cx="142" cy="816" r="6" fill="#e2603b"/>
+  <text x="159" y="821" class="note">No cloud authority</text>
+  <circle cx="377" cy="816" r="6" fill="#49b3ad"/>
+  <text x="394" y="821" class="note">No admin IPC</text>
+  <circle cx="590" cy="816" r="6" fill="#7181c8"/>
+  <text x="607" y="821" class="note">Clients propose; host decides</text>
+  <circle cx="947" cy="816" r="6" fill="#8b9aaa"/>
+  <text x="964" y="821" class="note">A game room that travels with you</text>
+</svg>
