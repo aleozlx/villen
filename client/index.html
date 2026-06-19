@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Villen — player</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Villen</h1>
+      <div id="status" class="status">connecting…</div>
+    </header>
+
+    <div id="board" class="board" aria-label="chess board"></div>
+
+    <footer>
+      <div id="seats" class="seats"></div>
+      <p class="hint">
+        Move with the <strong>mouse</strong> (click a piece, then its
+        destination) or a <strong>gamepad</strong> (D-pad to move the cursor,
+        <kbd>A</kbd> to pick/place, <kbd>B</kbd> to cancel). Both feed the same
+        move — use whichever.
+      </p>
+    </footer>
+  </main>
+
+  <!-- Promotion chooser (the single move intake shows this when needed). -->
+  <div id="promo" class="promo hidden" role="dialog" aria-label="choose promotion">
+    <div class="promo-row"></div>
+  </div>
+
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>

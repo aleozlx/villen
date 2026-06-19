@@ -34,6 +34,11 @@ public:
 
     void setCallbacks(Callbacks cb) { cb_ = std::move(cb); }
 
+    // Serve the browser player client from this directory for plain HTTP GETs on
+    // the same port (so players just open ws://host:port's http equivalent).
+    // WebSocket upgrades on the same port are unaffected.
+    void setStaticRoot(std::string dir) { staticRoot_ = std::move(dir); }
+
     // Bind and listen on all interfaces. Returns false on failure.
     bool listen(std::uint16_t port);
 
@@ -67,11 +72,13 @@ private:
     ConnId nextId_ = 1;
     std::unordered_map<ConnId, Conn> conns_;
     Callbacks cb_;
+    std::string staticRoot_;
 
     void acceptNew();
     void onReadable(ConnId id);
     void flush(Conn& c);
     bool tryHandshake(ConnId id);   // returns true once handshake completes
+    void serveHttp(ConnId id, const std::string& request);  // static file / 404
     void parseFrames(ConnId id);    // consume complete frames from inbuf
     void queueFrame(Conn& c, int opcode, std::string_view payload);
     void drop(ConnId id);           // close fd + fire onClose

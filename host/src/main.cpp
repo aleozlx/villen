@@ -21,12 +21,20 @@ void onSignal(int) { g_running = 0; }
 
 int main(int argc, char** argv) {
     std::uint16_t port = 9002;
+#ifdef VILLEN_DEFAULT_CLIENT_DIR
+    std::string clientDir = VILLEN_DEFAULT_CLIENT_DIR;
+#else
+    std::string clientDir = "client";
+#endif
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc)
             port = static_cast<std::uint16_t>(std::atoi(argv[++i]));
+        else if (std::strcmp(argv[i], "--client-dir") == 0 && i + 1 < argc)
+            clientDir = argv[++i];
     }
 
     villen::net::WsServer ws;
+    ws.setStaticRoot(clientDir);
     if (!ws.listen(port)) {
         std::fprintf(stderr, "villen: failed to bind port %u\n", port);
         return 1;
@@ -42,11 +50,11 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
 
-    std::printf("Villen server listening — players connect to:\n");
+    std::printf("Villen server listening — players open in a browser:\n");
     auto ips = villen::net::localIpv4Addresses();
-    if (ips.empty()) std::printf("  ws://<this-host>:%u\n", port);
-    for (const auto& ip : ips) std::printf("  ws://%s:%u\n", ip.c_str(), port);
-    std::printf("(Ctrl-C to stop)\n");
+    if (ips.empty()) std::printf("  http://<this-host>:%u\n", port);
+    for (const auto& ip : ips) std::printf("  http://%s:%u\n", ip.c_str(), port);
+    std::printf("(serving client from %s; Ctrl-C to stop)\n", clientDir.c_str());
     std::fflush(stdout);
 
     while (g_running) ws.poll(100);

@@ -10,6 +10,8 @@
 
 #include <array>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include <vector>
 
 namespace villen::net {
@@ -108,6 +110,21 @@ constexpr int kOpPong = 0xA;
 void setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+std::string contentType(const std::string& path) {
+    auto ends = [&](const char* ext) {
+        std::size_t n = std::strlen(ext);
+        return path.size() >= n && path.compare(path.size() - n, n, ext) == 0;
+    };
+    if (ends(".html")) return "text/html; charset=utf-8";
+    if (ends(".js")) return "text/javascript; charset=utf-8";
+    if (ends(".css")) return "text/css; charset=utf-8";
+    if (ends(".json")) return "application/json";
+    if (ends(".svg")) return "image/svg+xml";
+    if (ends(".png")) return "image/png";
+    if (ends(".ico")) return "image/x-icon";
+    return "application/octet-stream";
 }
 
 }  // namespace
@@ -220,7 +237,12 @@ bool WsServer::tryHandshake(ConnId id) {
     c.inbuf.erase(0, end + 4);
 
     std::string key = headerValue(req, "Sec-WebSocket-Key");
-    if (key.empty()) { drop(id); return false; }
+    if (key.empty()) {
+        // Not a WebSocket upgrade: treat as a plain HTTP request and (if a
+        // static root is set) serve the browser client, then close.
+        serveHttp(id, req);
+        return false;
+    }
 
     std::string resp =
         "HTTP/1.1 101 Switching Protocols\r\n"
@@ -232,6 +254,50 @@ bool WsServer::tryHandshake(ConnId id) {
     flush(c);
     if (cb_.onOpen) cb_.onOpen(id);
     return true;
+}
+
+void WsServer::serveHttp(ConnId id, const std::string& request) {
+    Conn& c = conns_[id];
+    auto respond = [&](const std::string& status, const std::string& ctype,
+                       const std::string& body) {
+        c.outbuf += "HTTP/1.1 " + status + "\r\n" +
+                    "Content-Type: " + ctype + "\r\n" +
+                    "Content-Length: " + std::to_string(body.size()) + "\r\n" +
+                    "Connection: close\r\nCache-Control: no-cache\r\n\r\n" + body;
+        c.closing = true;  // reaped once the response has drained
+        flush(c);
+    };
+
+    if (staticRoot_.empty()) {
+        respond("426 Upgrade Required", "text/plain",
+                "This endpoint speaks WebSocket only.\n");
+        return;
+    }
+
+    std::string method, path;
+    {
+        std::istringstream ls(request);
+        ls >> method >> path;
+    }
+    if (method != "GET") {
+        respond("405 Method Not Allowed", "text/plain", "405\n");
+        return;
+    }
+    if (auto q = path.find('?'); q != std::string::npos) path.resize(q);
+    if (path.empty() || path == "/") path = "/index.html";
+    if (path.find("..") != std::string::npos) {  // refuse path traversal
+        respond("400 Bad Request", "text/plain", "400\n");
+        return;
+    }
+
+    std::ifstream f(staticRoot_ + path, std::ios::binary);
+    if (!f) {
+        respond("404 Not Found", "text/plain", "Not found: " + path + "\n");
+        return;
+    }
+    std::stringstream ss;
+    ss << f.rdbuf();
+    respond("200 OK", contentType(path), ss.str());
 }
 
 void WsServer::parseFrames(ConnId id) {

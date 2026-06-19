@@ -14,3 +14,8 @@ add_executable(villen
 target_include_directories(villen PRIVATE ${CMAKE_SOURCE_DIR}/third_party)
 target_link_libraries(villen PRIVATE villen::engine)
 target_compile_features(villen PRIVATE cxx_std_17)
+
+# Dev convenience: serve the browser client straight from the source tree unless
+# overridden with --client-dir at runtime.
+target_compile_definitions(villen PRIVATE
+    VILLEN_DEFAULT_CLIENT_DIR="${CMAKE_SOURCE_DIR}/client")
