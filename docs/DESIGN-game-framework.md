@@ -102,6 +102,7 @@ struct Room {
 
 // What every game implements. No game concept appears inside Villen itself.
 struct IGame {
+  virtual ~IGame() = default;
   virtual SeatRoster seats() = 0;                  // declares the shape; Villen assigns/holds
   virtual void onJoin   (Room&, ConnId, SeatId) = 0;  // game pushes its own state to the joiner
   virtual void onLeave  (Room&, ConnId, SeatId) = 0;
@@ -112,9 +113,17 @@ struct IGame {
 };
 
 // One IGame instance per room (§5.2). Single-room is just "max rooms = 1".
-struct IGameFactory { virtual std::unique_ptr<IGame> create() = 0; };
+struct IGameFactory {
+  virtual ~IGameFactory() = default;
+  virtual std::unique_ptr<IGame> create() = 0;
+};
 
-void run(Config{ .staticRoot = "client", .factory = ... });
+struct Config {
+  std::string staticRoot = "client";
+  std::unique_ptr<IGameFactory> factory;
+};
+
+void run(Config);   // e.g. run({ .staticRoot = "client", .factory = makeSnake() });
 
 }  // namespace villen
 ```
