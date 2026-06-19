@@ -124,6 +124,15 @@ can move with the mouse **or** a gamepad interchangeably.
 > can drop in later without touching the engine or session layers (§9.5).
 > Performance is a non-issue at LAN/chess message volume.
 
+## Beyond the MVP
+
+Increments past the load-bearing spine (DESIGN §13):
+
+- [x] **Reconnection & seat lifecycle** — a dropped player's seat is *held*
+  (`disconnected`) instead of vacated, so a mid-game drop never hands the side to
+  the opponent. Token-free recovery: a transient drop reclaims the seat by name,
+  or the host re-opens it from the admin UI's per-seat **Free** control (§13 #1).
+
 ## License
 
 [MIT](LICENSE) © 2026 Alex Yang

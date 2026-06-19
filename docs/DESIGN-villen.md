@@ -113,9 +113,10 @@ These govern the **remote-browser ↔ server** edge. The ImGui admin sits on the
   "turn": "white",
   "legalMoves": [ { "from": "e2", "to": "e4" }, ... ],   // for the seat to move (UX only)
   "status": "active",                                     // active | checkmate | stalemate | draw
-  "seats": { "white": "connected", "black": "open" } }
+  "seats": { "white": "connected", "black": "disconnected" } }   // connected | disconnected | open
 
 { "type": "reject", "reason": "illegal_move", "move": { "from": "e2", "to": "e5" } }
+// reason ∈ { illegal_move, not_your_turn, seat_disconnected, bad_message, unknown_type }
 
 { "type": "sessionUpdate", "seats": { "white": "connected", "black": "open" } }
 ```
@@ -126,6 +127,7 @@ These govern the **remote-browser ↔ server** edge. The ImGui admin sits on the
 - `move` is plain data, **not** tied to how it was produced. A pointer click and a gamepad confirm produce the identical object — this is what makes input adapters interchangeable.
 - `legalMoves` is a client-side UX convenience (highlighting). The **server is still the sole authority**; client-side legality is never trusted.
 - `move` is attributed to a **seat**, not a connection. When input sources later decouple from connections (deferred Deck-input routing, reconnection, spectators), the contract does not change.
+- A **seat outlives its connection** (§9.3, §13 #1). A seat is `connected`, `open`, or `disconnected` (held across a drop). A held seat is reserved: no one — not even the opponent — may move that side, and proposing one is rejected with `seat_disconnected`. Reconnect is token-free: an explicit `join` for a seat *by name* reclaims a held seat; auto-assign (no `seat`) only takes `open` seats. The host can also re-open any seat from the admin UI.
 
 ---
 
@@ -231,7 +233,7 @@ None of these touch engine/server/contract/client logic — that code is machine
 
 ## 13. Open questions to revisit *after* MVP (do not block)
 
-- Reconnection: host re-issues seat access ("pull up sessions in the admin UI, player rescans") rather than clients holding bearer tokens. Decided in principle; deferred in build. Enabled by seat≠connection (§9.3).
+- Reconnection: host re-issues seat access ("pull up sessions in the admin UI, player rescans") rather than clients holding bearer tokens. Decided in principle; deferred in build. Enabled by seat≠connection (§9.3). **Implemented (first post-MVP increment).** A dropped seat is *held* (`disconnected`) rather than vacated, so the opponent can't seize it; a held side rejects moves with `seat_disconnected`. Two token-free ways back in: a player rejoins by re-asking for their seat *by name* (the seat name is public routing, not a credential — a transient browser drop reclaims automatically; a full page refresh loses the remembered seat and falls back to the admin path), or the host re-opens the seat from the admin UI's per-seat "Free" control. Still deferred: seat *lifecycle automation* (timeouts that auto-free a long-dead seat) and multi-session management.
 - Routing the **Deck's native controls into a game seat** — the admin UI already reads the gamepad in the MVP, which is the seed of this plumbing.
 - Connectivity beyond same-LAN: SoftAP for infra-free play; Tailscale for remote.
 - Display-only clients (a borrowed screen mirroring a seat) collapse into the uniform browser client: one that renders a seat it isn't the bound source for. No new type needed.
