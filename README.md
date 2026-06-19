@@ -14,10 +14,10 @@ turn order) without distractions. The engine is a swappable slot; the transport,
 session/seat model, admin UI, and dual-input player client know nothing about
 which game occupies it.
 
-The name is a diminutive of **Villentretenmerth**, the golden dragon of
-Sapkowski's *Sword of Destiny* who lives disguised as the ordinary man "Borch" —
-fitting for a server that presents as an everyday handheld app and is something
-rarer underneath. See [`DESIGN-villen.md`](DESIGN-villen.md) for the full design.
+The name nods to a dragon of fantasy lore that lives disguised as an
+unremarkable traveler — fitting for a server that presents as an everyday
+handheld app and is something rarer underneath. See
+[`DESIGN-villen.md`](DESIGN-villen.md) for the full design.
 
 ## Architecture at a glance
 

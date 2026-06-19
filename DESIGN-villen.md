@@ -1,6 +1,6 @@
 # Villen — MVP Design & Handoff
 
-> **Villen** — a portable chess(-variant) server you carry. The name is a diminutive of **Villentretenmerth**, the golden dragon of Sapkowski's *Sword of Destiny* who lives disguised under the human name Borch — fitting for a server that presents as an ordinary handheld app and is something rarer underneath. The project began with the question "is that a dragon on the chessboard?" (The chess-dragon = bishop+knight compound, an *archbishop*.) Bonus reading: *Villen* is German for "villas" — a host that holds rooms players join.
+> **Villen** — a portable chess(-variant) server you carry. The name nods to a dragon of fantasy lore that lives disguised as an unremarkable traveler — fitting for a server that presents as an ordinary handheld app and is something rarer underneath. The project began with the question "is that a dragon on the chessboard?" (The chess-dragon = bishop+knight compound, an *archbishop*.) Bonus reading: *Villen* is German for "villas" — a host that holds rooms players join.
 
 **Status:** Ready for implementation
 **Scope:** Minimum slice that proves the architecture. Vanilla chess, desktop Chrome player client, no AI.
