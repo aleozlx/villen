@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Villen MVP architecture</title>
+  <desc id="desc">One native C++ host process contains the engine, authoritative session state, WebSocket server, and Dear ImGui admin UI. Remote browser clients connect only through JSON over WebSocket.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#334155"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#2563eb"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.18"/>
+    </filter>
+    <style>
+      .bg { fill: #f8fafc; }
+      .host { fill: #ecfeff; stroke: #0891b2; stroke-width: 3; }
+      .box { fill: #ffffff; stroke: #334155; stroke-width: 2; filter: url(#shadow); }
+      .engine { fill: #fef3c7; stroke: #d97706; }
+      .state { fill: #dcfce7; stroke: #16a34a; }
+      .ws { fill: #dbeafe; stroke: #2563eb; }
+      .ui { fill: #fce7f3; stroke: #db2777; }
+      .browser { fill: #eef2ff; stroke: #4f46e5; }
+      .label { font: 700 24px Inter, Segoe UI, Arial, sans-serif; fill: #0f172a; }
+      .small { font: 500 17px Inter, Segoe UI, Arial, sans-serif; fill: #334155; }
+      .tiny { font: 500 14px Inter, Segoe UI, Arial, sans-serif; fill: #475569; }
+      .caption { font: 600 16px Inter, Segoe UI, Arial, sans-serif; fill: #0f172a; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .blueArrow { stroke: #2563eb; stroke-width: 3; fill: none; marker-end: url(#arrow-blue); }
+      .direct { stroke: #db2777; stroke-width: 3; stroke-dasharray: 8 6; fill: none; marker-end: url(#arrow); }
+      .boundary { stroke: #64748b; stroke-width: 2; stroke-dasharray: 10 8; fill: none; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1200" height="760" rx="24"/>
+  <text x="600" y="48" text-anchor="middle" class="label">Villen MVP System Architecture</text>
+  <text x="600" y="76" text-anchor="middle" class="small">Portable host owns authority; browsers are player clients over JSON/WebSocket only.</text>
+
+  <rect x="70" y="115" width="720" height="560" rx="28" class="host" filter="url(#shadow)"/>
+  <text x="430" y="152" text-anchor="middle" class="label">One native C++ binary on the Deck / host PC</text>
+  <text x="430" y="180" text-anchor="middle" class="small">Single-threaded loop: ws.poll() → ImGui frame → render</text>
+
+  <rect x="120" y="225" width="260" height="105" rx="16" class="box engine"/>
+  <text x="250" y="260" text-anchor="middle" class="caption">Pure chess engine</text>
+  <text x="250" y="288" text-anchor="middle" class="tiny">legalMoves / applyMove</text>
+  <text x="250" y="310" text-anchor="middle" class="tiny">no I/O, graphics, or devices</text>
+
+  <rect x="480" y="225" width="260" height="105" rx="16" class="box state"/>
+  <text x="610" y="260" text-anchor="middle" class="caption">Authoritative state</text>
+  <text x="610" y="288" text-anchor="middle" class="tiny">sessions, seats, turns</text>
+  <text x="610" y="310" text-anchor="middle" class="tiny">serializable position</text>
+
+  <rect x="120" y="440" width="260" height="105" rx="16" class="box ws"/>
+  <text x="250" y="475" text-anchor="middle" class="caption">WebSocket server</text>
+  <text x="250" y="503" text-anchor="middle" class="tiny">JSON wire contract</text>
+  <text x="250" y="525" text-anchor="middle" class="tiny">join / proposeMove / state</text>
+
+  <rect x="480" y="440" width="260" height="105" rx="16" class="box ui"/>
+  <text x="610" y="475" text-anchor="middle" class="caption">Dear ImGui admin UI</text>
+  <text x="610" y="503" text-anchor="middle" class="tiny">SDL2 + OpenGL3</text>
+  <text x="610" y="525" text-anchor="middle" class="tiny">session table, join URL, QR</text>
+
+  <path d="M380 278 L480 278" class="arrow"/>
+  <text x="430" y="260" text-anchor="middle" class="tiny">validate</text>
+  <path d="M610 330 L610 440" class="direct"/>
+  <text x="665" y="386" class="tiny">direct in-process</text>
+  <text x="665" y="407" class="tiny">read / mutate</text>
+  <path d="M380 492 C430 492 430 278 480 278" class="arrow"/>
+  <text x="428" y="383" text-anchor="middle" class="tiny">apply moves</text>
+  <path d="M480 305 C430 365 430 450 380 475" class="blueArrow"/>
+  <text x="415" y="455" text-anchor="middle" class="tiny">broadcast state</text>
+
+  <line x1="830" y1="110" x2="830" y2="680" class="boundary"/>
+  <text x="845" y="130" class="tiny">network boundary</text>
+
+  <rect x="900" y="190" width="230" height="115" rx="18" class="box browser"/>
+  <text x="1015" y="228" text-anchor="middle" class="caption">Browser client</text>
+  <text x="1015" y="256" text-anchor="middle" class="tiny">White / Black player</text>
+  <text x="1015" y="278" text-anchor="middle" class="tiny">desktop Chrome</text>
+
+  <rect x="900" y="455" width="230" height="125" rx="18" class="box browser"/>
+  <text x="1015" y="493" text-anchor="middle" class="caption">Input adapters</text>
+  <text x="1015" y="521" text-anchor="middle" class="tiny">pointer clicks</text>
+  <text x="1015" y="543" text-anchor="middle" class="tiny">gamepad cursor + A/B</text>
+  <text x="1015" y="565" text-anchor="middle" class="tiny">both call submitMove()</text>
+
+  <path d="M900 247 C760 247 760 492 380 492" class="blueArrow"/>
+  <text x="800" y="328" text-anchor="middle" class="tiny">proposeMove</text>
+  <path d="M380 465 C735 405 780 275 900 275" class="blueArrow"/>
+  <text x="782" y="390" text-anchor="middle" class="tiny">state / reject</text>
+  <path d="M1015 455 L1015 305" class="arrow"/>
+  <text x="1045" y="385" class="tiny">same move object</text>
+
+  <text x="430" y="625" text-anchor="middle" class="small">No admin socket • no IPC • no shared-state locks • server remains sole authority</text>
+  <text x="1015" y="650" text-anchor="middle" class="small">Remote browsers never mutate state directly</text>
+</svg>
