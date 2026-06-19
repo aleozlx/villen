@@ -113,9 +113,10 @@ function choosePromotion(done) {
   for (const piece of ["queen", "rook", "bishop", "knight"]) {
     const b = document.createElement("button");
     b.title = piece;
+    b.setAttribute("aria-label", piece);    // button carries the label…
     const img = document.createElement("img");
     img.src = `/pieces/${army}-${piece}.png`;
-    img.alt = piece;
+    img.alt = "";                            // …so the sprite is presentational (no double announce)
     img.draggable = false;
     b.appendChild(img);
     b.addEventListener("click", () => finish(piece));

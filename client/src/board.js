@@ -65,13 +65,14 @@ export class Board {
       else if (ch >= "1" && ch <= "8") file += +ch;
       else {
         const src = pieceSrc(ch);
-        if (src) {
+        const sq = this.squares[squareName(file, rank)];
+        if (src && sq) {            // skip unknown letters or out-of-range files in a malformed FEN
           const img = document.createElement("img");
           img.className = "piece" + (ch === ch.toLowerCase() ? " black" : "");
           img.src = src;
           img.alt = ch;
           img.draggable = false;
-          this.squares[squareName(file, rank)].appendChild(img);
+          sq.appendChild(img);
         }
         file++;
       }

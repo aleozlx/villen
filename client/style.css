@@ -24,7 +24,8 @@ body {
 main { padding: 1rem; width: min(92vmin, 720px); }
 
 header { display: flex; align-items: center; justify-content: space-between; }
-.wordmark { height: 2.2rem; width: auto; display: block; margin: 0.2rem 0; }
+.brand { margin: 0; line-height: 1; }
+.wordmark { height: 2.2rem; width: auto; display: block; }
 
 .status { font-variant: small-caps; opacity: 0.9; }
 .status.win { color: #7ddc7d; font-weight: 700; }
