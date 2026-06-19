@@ -21,19 +21,13 @@ handheld app and is something rarer underneath. See
 
 ## Architecture at a glance
 
-The host is **one C++ executable** containing, in a single thread, the engine,
-the authoritative session/seat state, a WebSocket server for remote players, and
-an in-process Dear ImGui admin UI that reads and mutates that state directly — no
-admin socket, no IPC.
+![Future-facing Villen architecture](docs/villen-future-architecture.svg)
 
-```
-ONE NATIVE BINARY (eventually on a Steam Deck)
-├─ engine                       pure rules; no I/O          (engine/)
-├─ session / seat state         in-memory, authoritative    (host/)
-├─ WS server  ◄───────────────  remote player browsers      (host/, client/)
-└─ ImGui loop  ──reads/mutates──►  session state directly   (host/)
-        (SDL2 + GL3 backend; gamepad-navigable)
-```
+The host is **one C++ executable** containing, in a single thread, a pluggable
+**Game Engine**, the authoritative session/seat state, a WebSocket server for
+remote players, and an in-process Dear ImGui admin UI that reads and mutates
+that state directly — no admin socket, no IPC. Chess is the first engine, not
+the limit of the architecture.
 
 The only network boundary is **remote players' browsers**, speaking
 JSON-over-WebSocket. The admin UI *is* the server with a face. A single 60 Hz
