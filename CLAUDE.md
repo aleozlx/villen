@@ -14,7 +14,8 @@ Chess is the first engine in a deliberately game-agnostic slot.
 ```bash
 # Engine + tests only (headless, no SDL2/GL — what CI runs):
 cmake -S . -B build -DVILLEN_BUILD_HOST=OFF && cmake --build build && ctest --test-dir build
-# Full host (needs SDL2 + OpenGL):
+# Full host (needs SDL2 + OpenGL; admin UI's ImGui is a submodule):
+git submodule update --init third_party/imgui   # once, if not cloned --recursive
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
 ```
 

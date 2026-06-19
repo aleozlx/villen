@@ -4,6 +4,7 @@
 #include <SDL_opengl.h>
 
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -42,10 +43,17 @@ void drawQr(const std::string& text, float modulePx) {
     ImGui::Dummy(ImVec2(total, total));  // reserve layout space for the code
 }
 
-void seatCell(const char* label, bool connected) {
-    ImVec4 col = connected ? ImVec4(0.5f, 0.86f, 0.5f, 1.0f)
-                           : ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
-    ImGui::TextColored(col, "%s: %s", label, connected ? "connected" : "open");
+// Colour a seat by its lifecycle state: green connected, amber disconnected
+// (held across a drop), grey open (DESIGN §13 #1).
+void seatCell(const char* label, const char* status) {
+    ImVec4 col;
+    if (std::strcmp(status, "connected") == 0)
+        col = ImVec4(0.5f, 0.86f, 0.5f, 1.0f);
+    else if (std::strcmp(status, "disconnected") == 0)
+        col = ImVec4(0.95f, 0.75f, 0.35f, 1.0f);
+    else
+        col = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+    ImGui::TextColored(col, "%s: %s", label, status);
 }
 
 void drawAdmin(GameServer& game, net::WsServer& ws, const std::string& joinUrl) {
@@ -83,9 +91,9 @@ void drawAdmin(GameServer& game, net::WsServer& ws, const std::string& joinUrl) 
         ImGui::TableSetColumnIndex(2);
         ImGui::TextUnformatted(turn);
         ImGui::TableSetColumnIndex(3);
-        seatCell("W", game.whiteSeated());
+        seatCell("W", game.whiteSeatStatus());
         ImGui::SameLine();
-        seatCell("B", game.blackSeated());
+        seatCell("B", game.blackSeatStatus());
         ImGui::EndTable();
     }
 
@@ -100,6 +108,21 @@ void drawAdmin(GameServer& game, net::WsServer& ws, const std::string& joinUrl) 
     ImGui::Spacing();
     ImGui::SeparatorText("Admin");
     if (ImGui::Button("New game")) game.reset();
+
+    // Re-issue a seat (DESIGN §13 #1): release a seat — typically one a
+    // disconnected player left held — so someone can rejoin it. Disabled when the
+    // seat is already open. Gamepad-navigable like every other admin control.
+    const bool whiteOpen = std::strcmp(game.whiteSeatStatus(), "open") == 0;
+    const bool blackOpen = std::strcmp(game.blackSeatStatus(), "open") == 0;
+    ImGui::SameLine();
+    ImGui::BeginDisabled(whiteOpen);
+    if (ImGui::Button("Free White")) game.freeSeat(chess::Color::White);
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(blackOpen);
+    if (ImGui::Button("Free Black")) game.freeSeat(chess::Color::Black);
+    ImGui::EndDisabled();
+
     ImGui::SameLine();
     ImGui::Text("live connections: %zu", ws.connectionCount());
 

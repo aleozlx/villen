@@ -18,7 +18,13 @@ endif()
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 
-set(IMGUI ${CMAKE_CURRENT_SOURCE_DIR}/imgui)
+# Dear ImGui comes from the repo's third_party/imgui submodule, so the spike
+# builds straight from a `git clone --recursive` (or `git submodule update --init`).
+set(IMGUI ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/imgui)
+if(NOT EXISTS ${IMGUI}/imgui.cpp)
+    message(FATAL_ERROR
+        "third_party/imgui is empty — run: git submodule update --init third_party/imgui")
+endif()
 add_executable(deck_spike
     main.cpp
     ${IMGUI}/imgui.cpp

@@ -29,6 +29,10 @@ jobs:
       CXX: ${{ matrix.cxx }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This matrix builds the full host (SDL2/GL installed below), whose
+          # admin UI compiles Dear ImGui from the third_party/imgui submodule.
+          submodules: recursive
 
       - name: Install build dependencies
         run: |

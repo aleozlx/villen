@@ -60,6 +60,16 @@ connected over WebSocket on the same thread:
 
 Requires a C++17 compiler, CMake ≥ 3.16, and (for the host) SDL2 + OpenGL.
 
+The host's admin UI compiles Dear ImGui from the `third_party/imgui` git
+submodule, so clone with `--recursive` (or initialise it after cloning). The
+engine-only build below doesn't need it.
+
+```bash
+git clone --recursive https://github.com/aleozlx/villen
+# already cloned without --recursive? initialise the submodule:
+git submodule update --init third_party/imgui
+```
+
 ```bash
 # Debian/Ubuntu host dependencies
 sudo apt-get install -y cmake ninja-build libsdl2-dev libgl1-mesa-dev zlib1g-dev
@@ -113,6 +123,15 @@ can move with the mouse **or** a gamepad interchangeably.
 > single main-loop `poll()` (DESIGN §5), kept behind a poll-shaped seam so µWS
 > can drop in later without touching the engine or session layers (§9.5).
 > Performance is a non-issue at LAN/chess message volume.
+
+## Beyond the MVP
+
+Increments past the load-bearing spine (DESIGN §13):
+
+- [x] **Reconnection & seat lifecycle** — a dropped player's seat is *held*
+  (`disconnected`) instead of vacated, so a mid-game drop never hands the side to
+  the opponent. Token-free recovery: a transient drop reclaims the seat by name,
+  or the host re-opens it from the admin UI's per-seat **Free** control (§13 #1).
 
 ## License
 

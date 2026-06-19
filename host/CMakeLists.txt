@@ -1,9 +1,10 @@
 # The native host binary: WebSocket player server + the in-process Dear ImGui
 # admin UI — one executable, one process, one thread (DESIGN §2, §5).
 #
-# The admin UI needs SDL2 + OpenGL and fetches Dear ImGui. If those aren't
-# available we still build a fully functional server-only host (run with
-# --headless behaviour), so engine/server work never depends on a display.
+# The admin UI needs SDL2 + OpenGL and compiles Dear ImGui from the
+# third_party/imgui submodule. If those aren't available we still build a fully
+# functional server-only host (run with --headless behaviour), so engine/server
+# work never depends on a display.
 
 add_executable(villen
     src/main.cpp
@@ -26,25 +27,29 @@ find_package(SDL2 QUIET)
 find_package(OpenGL QUIET)
 
 if(SDL2_FOUND AND OpenGL_FOUND)
-    include(FetchContent)
-    FetchContent_Declare(
-        imgui
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG        v1.91.5
-        GIT_SHALLOW    TRUE
-    )
-    FetchContent_MakeAvailable(imgui)
+    # Dear ImGui from the git submodule at third_party/imgui (DESIGN §8), pinned
+    # to v1.91.5 by the recorded gitlink. Compile its core plus the SDL2/OpenGL3
+    # backends directly into a small static lib. Submodule over FetchContent so
+    # the version pin is an explicit, reviewable gitlink instead of a configure-
+    # time network fetch — the Deck never builds, so the only cost is a one-time
+    # `git submodule update --init`.
+    set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/third_party/imgui)
+    if(NOT EXISTS ${IMGUI_DIR}/imgui.cpp)
+        message(FATAL_ERROR
+            "third_party/imgui is empty — initialise the submodule with:\n"
+            "  git submodule update --init third_party/imgui")
+    endif()
 
     add_library(imgui STATIC
-        ${imgui_SOURCE_DIR}/imgui.cpp
-        ${imgui_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
-        ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+        ${IMGUI_DIR}/imgui.cpp
+        ${IMGUI_DIR}/imgui_draw.cpp
+        ${IMGUI_DIR}/imgui_tables.cpp
+        ${IMGUI_DIR}/imgui_widgets.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     )
     target_include_directories(imgui PUBLIC
-        ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+        ${IMGUI_DIR} ${IMGUI_DIR}/backends)
     target_link_libraries(imgui PUBLIC SDL2::SDL2 OpenGL::GL)
 
     # Vendored QR generator (Nayuki, MIT) for the join-URL panel.
