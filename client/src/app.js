@@ -198,13 +198,14 @@ function syncHeatHud() {
 }
 
 // Swatches drawn with the very same palette function the board uses, so the
-// legend can never drift from what's painted. Counts (2, 0) / (0, 2) / (2, 2)
-// sit mid-ramp — representative of light, medium control and a fought-over square.
+// legend can never drift from what's painted. (2, 0) / (0, 2) / (2, 2) / (0, 0)
+// sample each state mid-ramp.
 function buildLegend() {
   const items = [
     [squareColor(2, 0), "White controls"],
-    [squareColor(0, 2), "Black controls"],
+    [squareColor(0, 2), "Red controls"],
     [squareColor(2, 2), "Contested"],
+    [squareColor(0, 0), "Unattacked"],
   ];
   legendEl.innerHTML = "";
   for (const [color, label] of items) {

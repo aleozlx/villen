@@ -3,9 +3,10 @@
 // For every square it counts how many White and how many Black pieces *attack*
 // it (a square is "controlled" whether the occupant is friend or foe — a
 // defended square is controlled too, which is what a tactician cares about),
-// then maps (whiteCount, blackCount) to the "Looking-Glass" palette: White's
-// control glows gold, Black's burns crimson, and squares both armies fight over
-// turn to contested violet glass. Deeper colour = more attackers.
+// then maps (whiteCount, blackCount) to a four-state palette: White's control
+// is blue, the Red Queen's side is red, squares both armies fight over turn
+// purple/magenta, and squares no one attacks stay solid white. Deeper colour =
+// more attackers.
 //
 // This stays entirely on the client and touches neither the engine nor the wire
 // contract: the server already broadcasts full FEN state (DESIGN §6), and the
@@ -123,27 +124,29 @@ function oklchToRgb(L, C, hDeg) {
   return `rgb(${g(R)}, ${g(G)}, ${g(B)})`;
 }
 
-// (white, black) control counts -> fill colour, or null for an uncontrolled
-// square (caller leaves the board's own light/dark colour showing through).
+// (white, black) control counts -> fill colour. Every square gets one: an
+// unattacked square is solid white (not transparent), so the heatmap fully
+// owns the board's colour while it's on.
 export function squareColor(w, b) {
-  if (w === 0 && b === 0) return null;
+  if (w === 0 && b === 0) return "#f4f4f4";          // unattacked — solid white
   if (w > 0 && b === 0) {
-    // White's side: gold-white, brighter/higher-chroma with more attackers.
+    // White's side: blue, deeper with more attackers.
     const t = Math.min(1, w / 4);
-    return oklchToRgb(0.82 + 0.13 * t, 0.06 + 0.08 * t, 95);
+    return oklchToRgb(0.80 - 0.23 * t, 0.09 + 0.10 * t, 256);
   }
   if (b > 0 && w === 0) {
-    // Black's side: crimson, deeper/darker with more attackers.
+    // Red Queen's side: red, deeper with more attackers.
     const t = Math.min(1, b / 4);
-    return oklchToRgb(0.62 - 0.22 * t, 0.13 + 0.10 * t, 25);
+    return oklchToRgb(0.70 - 0.23 * t, 0.14 + 0.09 * t, 27);
   }
-  // Contested -> the glass. Twilight violet, charged by how fiercely fought.
+  // Contested -> purple/magenta, charged by how fiercely fought.
   const fierce = Math.min(1, Math.min(w, b) / 3);
-  return oklchToRgb(0.5 - 0.12 * fierce, 0.10 + 0.09 * fierce, 305);
+  return oklchToRgb(0.60 - 0.15 * fierce, 0.15 + 0.10 * fierce, 328);
 }
 
 // Whole-board heatmap for a FEN: one { sq, color, w, b } per square. `color` is
-// null where neither side controls the square. `w`/`b` are the attacker counts.
+// always a solid fill (white where neither side controls). `w`/`b` are the
+// attacker counts.
 export function heatmapFor(fen) {
   const board = parsePlacement(fen);
   const { w, b } = controlMap(board);
