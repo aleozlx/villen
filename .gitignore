@@ -67,3 +67,7 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Step-6 Deck smoke spike: keep the sources (diagnostics-window seed), but ignore
+# the vendored Dear ImGui clone (becomes a submodule per DESIGN §8) and build dirs.
+spike/deck/imgui/

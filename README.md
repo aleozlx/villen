@@ -17,7 +17,7 @@ which game occupies it.
 The name nods to a dragon of fantasy lore that lives disguised as an
 unremarkable traveler — fitting for a server that presents as an everyday
 handheld app and is something rarer underneath. See
-[`DESIGN-villen.md`](DESIGN-villen.md) for the full design.
+[`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) for the full design.
 
 ## Architecture at a glance
 
@@ -48,7 +48,8 @@ locking (DESIGN §5).
 | `tests/`  | doctest suite (perft + special-rule coverage). |
 | `host/`   | The native binary: WS server + in-process ImGui admin UI. |
 | `client/` | Browser player client (pointer **and** gamepad input adapters). |
-| `DESIGN-villen.md` | Full design & implementation handoff. |
+| `docs/`   | Design & handoff doc, architecture diagram, Steam Deck debugging guide, art brief. |
+| `spike/`  | Throwaway Deck smoke-spike sources, kept as the seed for Step 7's diagnostics window. |
 
 ## Build
 

@@ -40,6 +40,8 @@ ONE NATIVE BINARY (on the Deck)
         (SDL2 + GL3 backend; gamepad-navigable)
 ```
 
+![Villen MVP architecture diagram](villen-architecture.svg)
+
 ---
 
 ## 3. Goals (what the MVP must prove)
