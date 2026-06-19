@@ -112,8 +112,15 @@ void GameServer::reset() {
 
 void GameServer::freeSeat(chess::Color c) {
     Seat& s = seatFor(c);
+    // If a live player still holds this seat (admin override, not the usual
+    // re-open of a disconnected seat), tell them they're now a spectator so their
+    // client clears its remembered seat instead of desyncing — it would otherwise
+    // keep showing the seat as "mine". A held/disconnected seat has no connection
+    // to notify.
+    ConnId kicked = s.conn;
     s.conn = 0;
     s.held = false;
+    if (kicked != 0) ws_.send(kicked, proto::joined(session_, "spectator"));
     broadcastSessionUpdate();
 }
 
