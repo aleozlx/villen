@@ -1,10 +1,12 @@
 # Villen — MVP Design & Handoff
 
-> **Villen** — a portable chess(-variant) server you carry. The name is a diminutive of **Villentretenmerth**, the golden dragon of Sapkowski's *Sword of Destiny* who lives disguised under the human name Borch — fitting for a server that presents as an ordinary handheld app and is something rarer underneath. The project began with the question "is that a dragon on the chessboard?" (The chess-dragon = bishop+knight compound, an *archbishop*.) Bonus reading: *Villen* is German for "villas" — a host that holds rooms players join.
+> **Villen** — a portable chess(-variant) server you carry. The name nods to a dragon of fantasy lore that lives disguised as an unremarkable traveler — fitting for a server that presents as an ordinary handheld app and is something rarer underneath. The project began with the question "is that a dragon on the chessboard?" (The chess-dragon = bishop+knight compound, an *archbishop*.) Bonus reading: *Villen* is German for "villas" — a host that holds rooms players join.
 
 **Status:** Ready for implementation
 **Scope:** Minimum slice that proves the architecture. Vanilla chess, desktop Chrome player client, no AI.
 **Audience:** The engineer standing this up. Assumes C++ familiarity (CMake, an event loop, basic graphics-backend boilerplate). No prior context on this project assumed.
+
+> **The architecture is not chess-specific.** Villen is a *generic host for deterministic, turn-based, seat-based games* — a portable session server with an in-process admin UI and a browser player client. Chess is the **first game we are building** on it, chosen because it is a well-understood, fully-deterministic rules engine that stresses the spine (legality, end states, turn order) without distractions. Everywhere this document says "chess," read "the pluggable game engine, of which chess is the first instance." The engine is a swappable slot (§9.1); the transport, session/seat model, admin UI, and dual-input client know nothing about which game occupies it.
 
 ---
 
