@@ -15,6 +15,14 @@
 
     <div id="board" class="board" aria-label="chess board"></div>
 
+    <div class="hud">
+      <button id="heatmap-toggle" class="toggle" type="button" aria-pressed="false"
+              title="Tint each square by who attacks it">Attack heatmap</button>
+      <button id="counts-toggle" class="toggle" type="button" aria-pressed="false" hidden
+              title="Show white / black attacker counts per square">Counts</button>
+      <div id="legend" class="legend" hidden></div>
+    </div>
+
     <footer>
       <div id="seats" class="seats"></div>
       <p class="hint">

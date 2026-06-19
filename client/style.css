@@ -1,6 +1,6 @@
 :root {
-  --light: #ebecd0;
-  --dark: #739552;
+  --light: #ffffff;
+  --dark: #454545;
   --sel: #f6f669;
   --target: rgba(20, 20, 20, 0.28);
   --cursor: #4a90e2;
@@ -56,10 +56,11 @@ h1 { font-size: 1.4rem; margin: 0.2rem 0; letter-spacing: 0.04em; }
 .square.light { background: var(--light); }
 .square.dark { background: var(--dark); }
 
-/* Piece glyphs sit above the square tint; white pieces get a dark outline so
-   they read on light squares. */
-.piece { color: #f8f8f8; text-shadow: 0 0 2px #000, 0 1px 2px #000; }
-.piece.black { color: #111; text-shadow: 0 0 1px #999; }
+/* Two armies (Looking-Glass): White's pieces are white, the Red Queen's side is
+   red. Both carry a dark outline so they stay legible on every square colour —
+   white-on-white and red-on-red would otherwise vanish. */
+.piece { color: #fbfbfb; text-shadow: 0 0 2px #000, 0 0 3px rgba(0, 0, 0, 0.75), 0 1px 2px #000; }
+.piece.black { color: #e23b3b; text-shadow: 0 0 2px #000, 0 0 3px rgba(0, 0, 0, 0.6), 0 1px 2px #000; }
 
 .square.sel { background: var(--sel) !important; }
 .square.check { box-shadow: inset 0 0 0 4px var(--check); }
@@ -79,6 +80,52 @@ h1 { font-size: 1.4rem; margin: 0.2rem 0; letter-spacing: 0.04em; }
   border-radius: 50%;
   background: transparent;
   border: 6px solid var(--target);
+}
+
+/* Attack-heatmap HUD: a toggle row plus a legend that appears only when on. */
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin: 0 0 0.5rem;
+}
+.toggle {
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+  color: var(--fg);
+  background: #34322e;
+  border: 1px solid #46433d;
+  border-radius: 5px;
+  padding: 0.28rem 0.7rem;
+  cursor: pointer;
+}
+.toggle:hover { border-color: #5d5950; }
+.toggle[aria-pressed="true"] {
+  /* twilight violet — echoes "the glass" where the two armies meet */
+  background: #5b4a6e;
+  border-color: #7c64a0;
+  color: #f3ecff;
+}
+
+.legend { display: flex; gap: 0.85rem; flex-wrap: wrap; font-size: 0.78rem; opacity: 0.92; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch {
+  width: 0.9em; height: 0.9em; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+/* White/black attacker count, shown over a square when "Counts" is on. */
+.count {
+  position: absolute;
+  right: 4px;
+  bottom: 1px;
+  font: 600 2.1vmin/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px #000, 0 0 2px #000;
+  pointer-events: none;
 }
 
 footer { font-size: 0.9rem; opacity: 0.92; }

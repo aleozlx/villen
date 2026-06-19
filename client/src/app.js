@@ -8,6 +8,7 @@
 
 import { Board, squareName } from "./board.js";
 import { connect } from "./net.js";
+import { heatmapFor, squareColor } from "./heatmap.js";
 import { PointerInput } from "../input/pointer.js";
 import { GamepadInput } from "../input/gamepad.js";
 
@@ -58,6 +59,7 @@ function onMessage(msg) {
     game.check = !!msg.check;
     board.renderPosition(game.position);
     paintCheck();
+    applyHeatmap();
     for (const a of adapters) a.reset();
     renderStatus();
     renderSeats();
@@ -168,6 +170,76 @@ function findKing(fen, color) {
   }
   return null;
 }
+
+// ---- Attack heatmap HUD -----------------------------------------------------
+// A view-only overlay (DESIGN keeps the engine pure; this derives everything
+// from the FEN we already render). Two independent toggles — tint the board by
+// who controls each square, and show the raw white/black attacker counts —
+// persisted so a player's preference survives a reload/reconnect.
+const heatBtn = document.getElementById("heatmap-toggle");
+const countsBtn = document.getElementById("counts-toggle");
+const legendEl = document.getElementById("legend");
+
+const heat = {
+  on: loadPref("villen.heatmap", false),
+  counts: loadPref("villen.heatmapCounts", false),
+};
+
+function applyHeatmap() {
+  if (heat.on) board.setHeatmap(heatmapFor(game.position), { showCounts: heat.counts });
+  else board.clearHeatmap();
+}
+
+function syncHeatHud() {
+  heatBtn.setAttribute("aria-pressed", String(heat.on));
+  countsBtn.setAttribute("aria-pressed", String(heat.counts));
+  countsBtn.hidden = !heat.on;
+  legendEl.hidden = !heat.on;
+}
+
+// Swatches drawn with the very same palette function the board uses, so the
+// legend can never drift from what's painted. (2, 0) / (0, 2) / (2, 2) / (0, 0)
+// sample each state mid-ramp.
+function buildLegend() {
+  const items = [
+    [squareColor(2, 0), "White controls"],
+    [squareColor(0, 2), "Red controls"],
+    [squareColor(2, 2), "Contested"],
+    [squareColor(0, 0), "Unattacked"],
+  ];
+  legendEl.innerHTML = "";
+  for (const [color, label] of items) {
+    const item = document.createElement("span");
+    item.className = "legend-item";
+    item.innerHTML = `<span class="legend-swatch" style="background:${color}"></span>${label}`;
+    legendEl.appendChild(item);
+  }
+}
+
+heatBtn.addEventListener("click", () => {
+  heat.on = !heat.on;
+  savePref("villen.heatmap", heat.on);
+  syncHeatHud();
+  applyHeatmap();
+});
+countsBtn.addEventListener("click", () => {
+  heat.counts = !heat.counts;
+  savePref("villen.heatmapCounts", heat.counts);
+  syncHeatHud();
+  applyHeatmap();
+});
+
+function loadPref(key, fallback) {
+  try { const v = localStorage.getItem(key); return v === null ? fallback : v === "true"; }
+  catch { return fallback; }
+}
+function savePref(key, value) {
+  try { localStorage.setItem(key, String(value)); } catch { /* ignore */ }
+}
+
+buildLegend();
+syncHeatHud();
+applyHeatmap();
 
 let flashTimer = null;
 function flash(text) {
