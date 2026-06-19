@@ -9,6 +9,7 @@
 import { Board, squareName } from "./board.js";
 import { connect } from "./net.js";
 import { PointerInput } from "../input/pointer.js";
+import { GamepadInput } from "../input/gamepad.js";
 
 const game = {
   position: "8/8/8/8/8/8/8/8 w - - 0 1",
@@ -27,8 +28,12 @@ const promoEl = document.getElementById("promo");
 
 const net = connect(onMessage, onStatus);
 
-// Every input source registers here. Each only needs (board, game, submitMove).
-const adapters = [new PointerInput(board, game, submitMove)];
+// Every input source registers here. Each only needs (board, game, submitMove);
+// both are live at once — use whichever (DESIGN §7). Neither knows the other.
+const adapters = [
+  new PointerInput(board, game, submitMove),
+  new GamepadInput(board, game, submitMove),
+];
 
 function onStatus(s) {
   if (s === "closed") {
