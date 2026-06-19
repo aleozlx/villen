@@ -6,21 +6,109 @@
 
 ![Villen — portable game server](rc/readme-banner-1280x320.png)
 
-> A portable **game server you carry** — a single native binary that runs the
-> authoritative game, hosts the session, and serves remote players from their own
-> browsers over the local network. No cloud, no accounts.
+A portable LAN game server you can carry in your backpack.
 
-Villen is a generic host for
-deterministic, turn-based, seat-based games. **Chess is the first game** built on
-it — chosen because its rules engine stresses the spine (legality, end states,
-turn order) without distractions. The engine is a swappable slot; the transport,
-session/seat model, admin UI, and dual-input player client know nothing about
-which game occupies it.
+Run Villen on a Steam Deck or laptop, show a QR code, and nearby players join
+from their phones, tablets, or browsers. The native host owns the authoritative
+game state; clients only send input and render the game. No cloud, no accounts,
+no matchmaking service.
+
+Chess is the first game. The larger goal is a small C++ foundation for
+deterministic, seat-based games that can be hosted from a device you physically
+carry.
+
+Most game frameworks think:
+
+```text
+Handheld / phone / browser  ──►  remote server
+```
+
+Villen thinks:
+
+```text
+Steam Deck / laptop in backpack
+        │
+        ▼
+portable authoritative server
+        │
+   local Wi-Fi / LAN
+        │
+  ┌─────┼─────┐
+  ▼     ▼     ▼
+phone tablet laptop
+browser browser browser
+```
 
 The name nods to a dragon of fantasy lore that lives disguised as an
 unremarkable traveler — fitting for a server that presents as an everyday
 handheld app and is something rarer underneath. See
 [`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) for the full design.
+
+## Why Villen?
+
+Most multiplayer stacks assume the server lives somewhere else: a cloud backend,
+a VPS, a desktop machine, or a home server. Villen treats the server as a
+physical object you bring with you.
+
+That makes it useful for demos, classrooms, conventions, board-game nights, LAN
+parties, cafés, and creator show-and-tell: “I built this. Scan this QR code and
+try it.”
+
+Villen is not trying to be a full game engine, cloud backend, or matchmaking
+service. It is the local authoritative host for small multiplayer games.
+
+## Quick start
+
+```bash
+git clone --recursive https://github.com/aleozlx/villen
+cd villen
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/host/villen --port 9002
+```
+
+Then open `http://<host-ip>:9002` from another device on the same LAN. The admin
+window shows the join URL and QR code.
+
+See [Build](#build) for dependencies, submodule notes, test commands, and
+engine-only builds.
+
+## Demo
+
+<!-- TODO: Add demo GIF or short video here. -->
+
+Planned demo media:
+
+* Short screencast: Steam Deck/laptop launches Villen, displays QR code, and
+  nearby devices join from browsers.
+* Entertainment demo: Claude or another AI plays chess through Villen.
+* Comic-style usage scenarios: “I built this — scan to play,” backpack server,
+  classroom/convention/LAN table.
+
+## Status
+
+Working today:
+
+* Native C++ host binary
+* Authoritative chess game state
+* Browser clients over local network
+* WebSocket transport
+* Seat claiming and reconnect behavior
+* In-process Dear ImGui admin UI
+* Mouse and gamepad input in the browser client
+
+Planned / evolving:
+
+* Extract the reusable Villen game-framework seam
+* Generalize the `IGame` contract
+* Add a second sample game to prove the framework shape
+* Improve packaging for portable demos
+
+## Good first PRs
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution ideas. Good early PRs
+include documentation improvements, demo media, Steam Deck notes,
+browser-client polish, and small tests.
 
 ## Architecture at a glance
 
