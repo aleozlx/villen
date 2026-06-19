@@ -60,6 +60,16 @@ connected over WebSocket on the same thread:
 
 Requires a C++17 compiler, CMake ≥ 3.16, and (for the host) SDL2 + OpenGL.
 
+The host's admin UI compiles Dear ImGui from the `third_party/imgui` git
+submodule, so clone with `--recursive` (or initialise it after cloning). The
+engine-only build below doesn't need it.
+
+```bash
+git clone --recursive https://github.com/aleozlx/villen
+# already cloned without --recursive? initialise the submodule:
+git submodule update --init third_party/imgui
+```
+
 ```bash
 # Debian/Ubuntu host dependencies
 sudo apt-get install -y cmake ninja-build libsdl2-dev libgl1-mesa-dev zlib1g-dev
