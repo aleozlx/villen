@@ -4,11 +4,28 @@ Guidance for Claude Code working in this repo. Start with
 [`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) — the full design & handoff.
 
 ## What this is
-Villen is a portable, single-binary game *host* you carry (eventually on a Steam
-Deck): one C++ executable that runs the authoritative game engine, the
-session/seat state, a WebSocket server for remote browser players, and an
-in-process Dear ImGui admin UI — all in **one thread, one main loop** (DESIGN §5).
-Chess is the first engine in a deliberately game-agnostic slot.
+Villen is a portable, single-binary game *host* you carry (and now actually
+deployed on a Steam Deck — see below): one C++ executable that runs the
+authoritative game engine, the session/seat state, a WebSocket server for remote
+browser players, and an in-process Dear ImGui admin UI — all in **one thread, one
+main loop** (DESIGN §5). Chess is the first engine in a deliberately game-agnostic
+slot.
+
+## What runs where (counterintuitive — read this)
+- **The browser player client** (`client/`) is plain HTML/CSS/JS over
+  HTTP + WebSocket with **no build step and no bundler** (ES modules loaded
+  directly). The board, highlights, promotion, *and* the attack-control heatmap
+  (`client/src/heatmap.js`) are all client-side DOM/JS. It uses **no SDL2, no
+  OpenGL**.
+- **SDL2 + OpenGL are server-side only.** The host binary links them (plus Dear
+  ImGui, the submodule) purely for its *own* in-process admin window — the
+  operator's session/seat table + join QR, shown on the Deck (DESIGN §2, §8). A
+  chess server pulling in a GPU UI toolkit looks wrong until you see it's the
+  admin *face*, in-process by design — never a client renderer.
+- The host also **builds and runs without SDL2/GL**: CMake falls back to a
+  server-only host and `main.cpp` runs headless (no admin window) when there's no
+  display — e.g. over SSH. So engine/server/client work never needs a GPU or a
+  display; only the on-Deck admin UI does.
 
 ## Build
 ```bash
@@ -32,6 +49,21 @@ the Deck's, the binary aborts in the loader before `main()` (looks like an insta
 crash) — static-link libstdc++ and `.symver`-pin the offending libc symbols, and
 verify with `objdump -T <bin> | grep GLIBC_`. The Game-Mode-only risks (Gamescope
 window, Steam Input → SDL2 gamepad, GL context) are covered there too.
+
+**This is not hypothetical — the host runs on a Steam Deck now**, as a non-Steam
+shortcut launched in Game Mode, living in the `deck` user's home at `~/Villen/`
+(`villen` binary + `client/` + `art/` + `run-villen.sh`, which `cd`s to its folder
+and runs `./villen --client-dir ./client`). `deploy/Villen/` is the local staging
+mirror of that bundle (untracked). Launched over SSH it runs headless (no
+`$DISPLAY`), serving players but with no admin window — the ImGui UI appears only
+in Game Mode.
+
+**Client-only changes are cheap — no rebuild, no restart.** The host serves
+`client/` straight from disk on every HTTP request (`ws_server.cpp`, via
+`--client-dir`), so shipping a UI change (the heatmap, e.g.) is just: sync
+`client/` into the Deck's `~/Villen/client/` and hard-refresh the browser (ES
+modules cache hard). Only changes to the **C++ host** (engine / server / admin UI)
+need the cross-build-and-copy dance above.
 
 ## Conventions
 - Keep the **engine pure** (no graphics/socket/device code) and all network

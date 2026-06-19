@@ -66,6 +66,43 @@ export class Board {
 
   hasPiece(name) { return !!this.squares[name]?.querySelector(".piece"); }
 
+  // ── Attack heatmap ─────────────────────────────────────────────────────────
+  // A control-tint layer *under* the pieces and highlight channels. We override
+  // each square's background inline (a null colour reverts to the .light/.dark
+  // CSS so the board's own colours show where nobody attacks). The selection
+  // highlight still wins via `background … !important`, and the box-shadow /
+  // ::after highlights layer on top, so input UX is untouched. Counts (optional)
+  // ride along as a small badge per square. `cells` comes from heatmap.js.
+  setHeatmap(cells, { showCounts = false } = {}) {
+    this.el.classList.add("heatmap");
+    for (const { sq, color, w, b } of cells) {
+      const el = this.squares[sq];
+      if (!el) continue;
+      el.style.background = color || "";        // null -> revert to .light/.dark
+      this._setCount(el, showCounts && (w || b) ? `${w} / ${b}` : null);
+    }
+  }
+
+  clearHeatmap() {
+    this.el.classList.remove("heatmap");
+    for (const name in this.squares) {
+      const el = this.squares[name];
+      el.style.background = "";
+      this._setCount(el, null);
+    }
+  }
+
+  _setCount(el, text) {
+    let badge = el.querySelector(".count");
+    if (!text) { badge?.remove(); return; }
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "count";
+      el.appendChild(badge);
+    }
+    badge.textContent = text;
+  }
+
   // Replace the contents of one highlight channel and repaint.
   highlight(channel, items) {
     this.channels[channel] = items || [];
