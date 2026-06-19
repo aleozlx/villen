@@ -23,12 +23,12 @@ input, and GL probing.
 - `CMakeLists.txt` — standalone build, **not** part of the main `villen` build.
 
 ## Building
-Needs SDL2 + OpenGL dev headers and Dear ImGui. The ImGui clone is gitignored
-(it becomes a `third_party/imgui` submodule in Step 7, per DESIGN §8); for a
-standalone build, drop ImGui at `spike/deck/imgui/`:
+Needs SDL2 + OpenGL dev headers. Dear ImGui comes from the repo's
+`third_party/imgui` submodule (DESIGN §8) — the same sources the host links — so
+initialise it first if you didn't `git clone --recursive`:
 
 ```bash
-git clone --depth 1 https://github.com/ocornut/imgui spike/deck/imgui
+git submodule update --init third_party/imgui
 cmake -S spike/deck -B build-spike -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-spike
 ```
