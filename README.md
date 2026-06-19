@@ -3,6 +3,8 @@
 [![CI](https://github.com/aleozlx/villen/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleozlx/villen/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+![Villen — portable game server](rc/readme-banner-1280x320.png)
+
 > A portable **game server you carry** — a single native binary that runs the
 > authoritative game, hosts the session, and serves remote players from their own
 > browsers over the local network. No cloud, no accounts.
