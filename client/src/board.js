@@ -84,6 +84,7 @@ export class Board {
   }
 
   clearHeatmap() {
+    if (!this.el.classList.contains("heatmap")) return;  // already clear: skip the 64-square sweep
     this.el.classList.remove("heatmap");
     for (const name in this.squares) {
       const el = this.squares[name];
