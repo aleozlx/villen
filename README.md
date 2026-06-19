@@ -17,7 +17,7 @@ which game occupies it.
 The name nods to a dragon of fantasy lore that lives disguised as an
 unremarkable traveler — fitting for a server that presents as an everyday
 handheld app and is something rarer underneath. See
-[`DESIGN-villen.md`](DESIGN-villen.md) for the full design.
+[`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) for the full design.
 
 ## Architecture at a glance
 
@@ -53,7 +53,8 @@ connected over WebSocket on the same thread:
 | `tests/`  | doctest suite (perft + special-rule coverage). |
 | `host/`   | The native binary: WS server + in-process ImGui admin UI. |
 | `client/` | Browser player client (pointer **and** gamepad input adapters). |
-| `DESIGN-villen.md` | Full design & implementation handoff. |
+| `docs/`   | Design & handoff doc, architecture diagram, Steam Deck debugging guide, art brief. |
+| `spike/`  | Throwaway Deck smoke-spike sources, kept as the seed for Step 7's diagnostics window. |
 
 ## Build
 
@@ -104,7 +105,7 @@ can move with the mouse **or** a gamepad interchangeably.
 - [x] **3.** Browser player client, pointer input
 - [x] **4.** Gamepad adapter into the same move intake (architectural milestone, §7)
 - [x] **5.** Seats + two browsers, turn enforcement, rejection path
-- [ ] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
+- [x] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
 - [x] **7.** ImGui admin shell in the same binary
 
 > **Transport note:** the design names µWebSockets as the player transport. The
