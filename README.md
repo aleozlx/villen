@@ -82,7 +82,7 @@ cmake --build build && ctest --test-dir build
 - [ ] **3.** Browser player client, pointer-only
 - [ ] **4.** Gamepad adapter into the same move intake (architectural milestone, §7)
 - [ ] **5.** Seats + two browsers, turn enforcement, rejection path
-- [ ] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
+- [x] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
 - [ ] **7.** ImGui admin shell in the same binary
 
 ## License
