@@ -95,6 +95,8 @@ ldd ./your_binary            # prints "version `GLIBC_2.xx' not found"
 
 Add the binary as **Add a Non-Steam Game → Browse**, set **Start In** to its
 folder (so any logfile lands there), then **Switch to Game Mode** and launch it.
+For the matching custom library capsule, hero, header, and logo, see
+[`villen-art-brief.md` §6](villen-art-brief.md#6-use-the-art-in-the-steam-library-non-steam-shortcut).
 
 | Symptom | Cause | Fix |
 |---|---|---|
