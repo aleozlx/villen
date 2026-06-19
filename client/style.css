@@ -23,8 +23,8 @@ body {
 
 main { padding: 1rem; width: min(92vmin, 720px); }
 
-header { display: flex; align-items: baseline; justify-content: space-between; }
-h1 { font-size: 1.4rem; margin: 0.2rem 0; letter-spacing: 0.04em; }
+header { display: flex; align-items: center; justify-content: space-between; }
+.wordmark { height: 2.2rem; width: auto; display: block; margin: 0.2rem 0; }
 
 .status { font-variant: small-caps; opacity: 0.9; }
 .status.win { color: #7ddc7d; font-weight: 700; }
@@ -60,8 +60,8 @@ h1 { font-size: 1.4rem; margin: 0.2rem 0; letter-spacing: 0.04em; }
    Queen's side the red-*.png ones. The sprite art carries its own colour, so no
    text outline; a soft drop-shadow lifts each piece off the square beneath it. */
 .piece {
-  width: 86%;
-  height: 86%;
+  width: 94%;
+  height: 94%;
   object-fit: contain;
   pointer-events: none;            /* clicks fall through to the .square */
   -webkit-user-drag: none;
