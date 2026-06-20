@@ -6,56 +6,7 @@
 
 ![Villen — portable game server](rc/readme-banner-1280x320.png)
 
-A portable LAN game server you can carry in your backpack.
-
-Run Villen on a Steam Deck or laptop, show a QR code, and nearby players join
-from their phones, tablets, or browsers. The native host owns the authoritative
-game state; clients only send input and render the game. No cloud, no accounts,
-no matchmaking service.
-
-Chess is the first game. The larger goal is a small C++ foundation for
-deterministic, seat-based games that can be hosted from a device you physically
-carry.
-
-Most game frameworks think:
-
-```text
-Handheld / phone / browser  ──►  remote server
-```
-
-Villen thinks:
-
-```text
-Steam Deck / laptop in backpack
-        │
-        ▼
-portable authoritative server
-        │
-   local Wi-Fi / LAN
-        │
-  ┌─────┼─────┐
-  ▼     ▼     ▼
-phone tablet laptop
-browser browser browser
-```
-
-The name nods to a dragon of fantasy lore that lives disguised as an
-unremarkable traveler — fitting for a server that presents as an everyday
-handheld app and is something rarer underneath. See
-[`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) for the full design.
-
-## Why Villen?
-
-Most multiplayer stacks assume the server lives somewhere else: a cloud backend,
-a VPS, a desktop machine, or a home server. Villen treats the server as a
-physical object you bring with you.
-
-That makes it useful for demos, classrooms, conventions, board-game nights, LAN
-parties, cafés, and creator show-and-tell: “I built this. Scan this QR code and
-try it.”
-
-Villen is not trying to be a full game engine, cloud backend, or matchmaking
-service. It is the local authoritative host for small multiplayer games.
+A game server I carry in my packpack.
 
 ## Quick start
 
@@ -73,42 +24,32 @@ window shows the join URL and QR code.
 See [Build](#build) for dependencies, submodule notes, test commands, and
 engine-only builds.
 
-## Demo
+## Motivation
+
+Run Villen on a Steam Deck or laptop, show a QR code, and nearby players join
+from their phones, tablets, or browsers. The native host owns the authoritative
+game state; clients only send input and render the game. No cloud, no accounts,
+no matchmaking service.
 
 ![Villen compared with traditional remote-server game frameworks](docs/readme-frameworks-comparison.jpg)
 
+The name nods to a certain dragon of fantasy lore that lives disguised as an
+unremarkable traveler — fitting for a server that presents as an everyday
+handheld app and is something rarer underneath. See
+[`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) for the full design.
+
+Most multiplayer stacks assume the server lives somewhere else: a cloud backend,
+a VPS, a desktop machine, or a home server. Villen treats the server as a
+physical object you bring with you.
+
+That makes it useful for demos, classrooms, conventions, board-game nights, LAN
+parties, cafés, and creator show-and-tell: “I built this. Scan this QR code and
+try it.”
+
 ![Villen portable game server comic: build, pack, share, and play anywhere](docs/readme-portable-server-comic.jpg)
 
-Planned demo media:
-
-* Short screencast: Steam Deck/laptop launches Villen, displays QR code, and
-  nearby devices join from browsers.
-* Entertainment demo: Claude or another AI plays chess through Villen.
-
-## Status
-
-Working today:
-
-* Native C++ host binary
-* Authoritative chess game state
-* Browser clients over local network
-* WebSocket transport
-* Seat claiming and reconnect behavior
-* In-process Dear ImGui admin UI
-* Mouse and gamepad input in the browser client
-
-Planned / evolving:
-
-* Extract the reusable Villen game-framework seam
-* Generalize the `IGame` contract
-* Add a second sample game to prove the framework shape
-* Improve packaging for portable demos
-
-## Good first PRs
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution ideas. Good early PRs
-include documentation improvements, demo media, Steam Deck notes,
-browser-client polish, and small tests.
+Villen is not trying to be a full game engine, cloud backend, or matchmaking
+service. It is the local authoritative host for small multiplayer games.
 
 ## Architecture at a glance
 
