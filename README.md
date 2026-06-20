@@ -75,15 +75,15 @@ engine-only builds.
 
 ## Demo
 
-<!-- TODO: Add demo GIF or short video here. -->
+![Villen compared with traditional remote-server game frameworks](docs/readme-frameworks-comparison.jpg)
+
+![Villen portable game server comic: build, pack, share, and play anywhere](docs/readme-portable-server-comic.jpg)
 
 Planned demo media:
 
 * Short screencast: Steam Deck/laptop launches Villen, displays QR code, and
   nearby devices join from browsers.
 * Entertainment demo: Claude or another AI plays chess through Villen.
-* Comic-style usage scenarios: “I built this — scan to play,” backpack server,
-  classroom/convention/LAN table.
 
 ## Status
 
