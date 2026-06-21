@@ -182,6 +182,52 @@ can move with the mouse **or** a gamepad interchangeably.
 | `--port N` | TCP port for the player WebSocket + HTTP client (default 9002). |
 | `--headless` | Run the server loop without opening the admin window. |
 | `--client-dir DIR` | Serve the browser client from `DIR` (defaults to the source tree). |
+| `--engine NAME` | Boot straight into an engine (`chess`, `chat`) instead of the launcher. |
+
+### Running the `chat` engine (local LLM)
+
+The `chat` engine runs a local LLM through a managed `llama-server` child
+([DESIGN-chat](docs/DESIGN-chat.md) §3.A). **Villen ships no model weights** — they
+are operator-supplied by design (size + licensing, §11): nothing is downloaded
+automatically. You fetch the GGUF files once and point the host at them.
+
+```bash
+# One model, spawned and managed by the host:
+./build/host/villen --engine chat --headless \
+  --llama-bin /path/to/llama-server \
+  --model     /path/to/qwen2.5-7b-instruct-q4_k_m.gguf
+
+# Or register several switchable models (admin console / SIGUSR1 cycles them):
+./build/host/villen --engine chat \
+  --llama-bin  /path/to/llama-server \
+  --models-dir /path/to/ggufs
+```
+
+| Flag | Effect |
+|---|---|
+| `--llama-bin PATH` | Spawn & manage this `llama-server` binary (§3.A). |
+| `--model PATH` | The GGUF to load at startup. |
+| `--model-path id=PATH` | Register a switchable model by id; repeat per model. |
+| `--models-dir DIR` | Scan a directory for `*.gguf` and auto-register recognized files. |
+| `--llama-url HOST:PORT` | Talk to an already-running `llama-server` instead of spawning one. |
+| `--chat-stub` | In-host echo generator — no model, no GPU (dev/CI). |
+
+**Getting the models.** Download the Q4_K_M GGUFs from HuggingFace. A filename is
+auto-recognized (for `--models-dir` and admin labelling) when it contains the model
+id, e.g. `qwen2.5-7b-instruct-q4_k_m.gguf` or `Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf`:
+
+| Model | License | GGUF source (e.g.) |
+|---|---|---|
+| Qwen2.5 7B Instruct | Apache-2.0 | `Qwen/Qwen2.5-7B-Instruct-GGUF` |
+| Mistral 7B Instruct v0.3 | Apache-2.0 | `bartowski/Mistral-7B-Instruct-v0.3-GGUF` |
+| Llama 3.1 8B Instruct | Llama 3.1 Community License | `bartowski/Meta-Llama-3.1-8B-Instruct-GGUF` |
+
+One model is resident at a time (~5 GB each, §5); the operator switches between them
+in the admin console. The `llama-server` binary is operator-supplied too. On the
+Steam Deck, put the weights on the SD card and use the resume-until-complete
+download loop in [`docs/steamdeck-debugging.md`](docs/steamdeck-debugging.md) §3.1
+(the HuggingFace CDN drops mid-transfer), and cross-build `llama-server` per the
+glibc notes there.
 
 ## License
 
