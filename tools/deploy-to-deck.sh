@@ -38,7 +38,8 @@ echo ">>> [3/4] sync binary + client/ (no --delete) + generic launchers"
 rsync -a "$SRC/villen" "$DECK:~/$DST/villen"
 rsync -a "$SRC/client/" "$DECK:~/$DST/client/"
 rsync -a "$SRC"/run-villen-*.sh "$DECK:~/$DST/"
-ssh "$DECK" "chmod +x ~/$DST/villen ~/$DST/run-villen-*.sh"
+[ -f "$SRC/tls-proxy.sh" ] && rsync -a "$SRC/tls-proxy.sh" "$DECK:~/$DST/"
+ssh "$DECK" "chmod +x ~/$DST/villen ~/$DST/run-villen-*.sh ~/$DST/tls-proxy.sh 2>/dev/null; true"
 
 echo ">>> [4/4] verify the binary loads on the Deck (glibc check)"
 ssh "$DECK" "cd ~/$DST &&

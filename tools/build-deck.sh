@@ -9,7 +9,7 @@
 # and static-link the C++ runtime, then gate on the highest GLIBC symbol the
 # binary ends up needing.
 #
-# Output: deploy/Villen/  (gitignored) — villen + client/ + run-villen-*.sh.
+# Output: deploy/Villen/  (gitignored) — villen + client/ + run-villen-*.sh + tls-proxy.sh.
 # No infra details here; the operator's device-specific launcher (model paths,
 # LD_LIBRARY_PATH, etc.) lives only on the Deck / in the gitignored bundle.
 #
@@ -58,6 +58,9 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE"
 cp "$BIN" "$BUNDLE/villen"; chmod +x "$BUNDLE/villen"
 cp -r "$ROOT/client" "$BUNDLE/client"
+# The LAN TLS proxy that gives a phone a secure context for the camera (§5.1 in
+# docs/steamdeck-debugging.md). The device launcher can start it alongside villen.
+cp "$ROOT/tools/tls-proxy.sh" "$BUNDLE/tls-proxy.sh"; chmod +x "$BUNDLE/tls-proxy.sh"
 
 # Two generic launchers. The device-specific one (chat with model paths /
 # LD_LIBRARY_PATH) is NOT generated here — it's operator config, kept on the Deck.

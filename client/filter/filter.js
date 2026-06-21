@@ -172,13 +172,27 @@ function tickStats() {
 
 // --- camera / sources --------------------------------------------------------
 
+// Port of the LAN TLS proxy that fronts the host for a secure context on a phone
+// (docs/steamdeck-debugging.md §5.1): plain http://<lan-ip> can't use the camera,
+// but https://<lan-ip>:8443 (self-signed cert, accepted once) can. Same host/path.
+const TLS_PROXY_PORT = 8443;
+const secureContextUrl = () =>
+  `https://${location.hostname}:${TLS_PROXY_PORT}${location.pathname}${location.search}`;
+
 async function startCamera() {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    // Secure-context gate (§10.2): camera is blocked on plain http://<lan-ip>.
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    // Secure-context gate (§10.2): the camera API is unavailable on plain
+    // http://<lan-ip>. Offer the HTTPS link (the LAN TLS proxy) unless we're
+    // already on https; the test pattern works on any origin meanwhile.
+    const url = secureContextUrl();
+    const link = location.protocol === "https:" ? "" :
+      ` For the camera, open <a href="${url}">${url}</a> and accept the one-time ` +
+      `certificate warning.`;
     noteEl.innerHTML =
-      "Camera needs a secure context. Open via <b>localhost</b>, enable the " +
-      "Chrome insecure-origin flag for this host, or use TLS — meanwhile the " +
-      "<b>test pattern</b> works anywhere.";
+      `Camera needs a secure context (HTTPS or localhost).${link} ` +
+      `On Android you can instead allow this origin under ` +
+      `<b>chrome://flags/#unsafely-treat-insecure-origin-as-secure</b>. ` +
+      `Meanwhile the <b>test pattern</b> works anywhere.`;
     useTestPattern = true;
     document.getElementById("testToggle").checked = true;
     return;
