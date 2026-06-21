@@ -80,21 +80,23 @@ connected over WebSocket on the same thread:
 
 ![Villen admin UI](docs/admin-ui.png)
 
-## Experimental engines (design drafts)
+## Engines
 
-The slot is game-agnostic, so chess is only the first occupant. These are
-**design drafts** (not yet built) — each chosen to stress a *different* axis of
-the architecture. See [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md)
+The slot is game-agnostic, so chess is only the first occupant. **`filter` and
+`chat` are built and running on the Steam Deck** (✅); `snake`/`canvas`/`jam` are
+still **design drafts** (📝) — each chosen to stress a *different* axis of the
+architecture. See [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md)
 for the full rationale, coverage matrix, and the "pick by axis, not by app"
 selection method.
 
 | Engine | What it is | Axis it stresses |
 |---|---|---|
-| [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
-| [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
-| [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
-| [`canvas`](docs/DESIGN-canvas.md) | a **shared collaborative drawing wall** (iPad-native) | many writers on one shared state |
-| [`jam`](docs/DESIGN-jam.md) | a **clock-synced collaborative groovebox** — devices synthesize audio locally, in sync | tight cross-device shared *time* |
+| ✅ [`chess`](docs/DESIGN-villen.md) | the first engine — turn-based board (chess + fairy variants), seats, promotion, the attack heatmap | the baseline the `IEngine` slot generalizes from |
+| ✅ [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
+| ✅ [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
+| 📝 [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
+| 📝 [`canvas`](docs/DESIGN-canvas.md) | a **shared collaborative drawing wall** (iPad-native) | many writers on one shared state |
+| 📝 [`jam`](docs/DESIGN-jam.md) | a **clock-synced collaborative groovebox** — devices synthesize audio locally, in sync | tight cross-device shared *time* |
 
 The Deck-side **launcher** that starts one of these at a time (plus a system-info
 view) is designed in [`docs/DESIGN-admin-shell.md`](docs/DESIGN-admin-shell.md). A
