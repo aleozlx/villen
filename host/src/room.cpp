@@ -155,7 +155,13 @@ void Room::freeSeat(SeatId s) {
     ConnId kicked = seats_[s].conn;
     seats_[s].conn = 0;
     seats_[s].held = false;
-    if (kicked != 0) ws_.send(kicked, envelope::joined(session_, "spectator"));
+    if (kicked != 0) {
+        // The kicked player is still connected, now a spectator. Notify the engine
+        // it left the seat (so engine state stays in sync with membership), then
+        // tell the client so it clears its remembered seat instead of desyncing.
+        engine_.onLeave(*this, kicked, s);
+        ws_.send(kicked, envelope::joined(session_, "spectator"));
+    }
     broadcastSeats();
 }
 

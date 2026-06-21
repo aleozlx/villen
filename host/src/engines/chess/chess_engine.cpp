@@ -1,6 +1,7 @@
 #include "chess_engine.hpp"
 
 #include <nlohmann/json.hpp>
+#include <cstring>
 #include <optional>
 
 #include "room.hpp"
@@ -18,6 +19,14 @@ namespace {
 // chess declares the roster {"white","black"}, so these indices are fixed.
 constexpr SeatId kWhite = 0;
 constexpr SeatId kBlack = 1;
+
+// Read a string field from untrusted client JSON without throwing: a value of the
+// wrong JSON type (or a missing key) yields "" rather than a json::type_error that
+// would crash the server (DoS). Used for every field read off the wire.
+std::string strField(const json& j, const char* key) {
+    auto it = j.find(key);
+    return (it != j.end() && it->is_string()) ? it->get<std::string>() : std::string();
+}
 
 const char* promoToString(chess::PieceType pt) {
     switch (pt) {
@@ -52,8 +61,9 @@ std::string stateMsg(const chess::Position& pos, const Room& room) {
     for (const chess::Move& m : pos.legalMoves()) legal.push_back(moveJson(m));
 
     json seats = json::object();
-    for (const std::string& name : room.roster().names)
-        seats[name] = room.seatStatus(room.seatIndex(name));
+    const auto& names = room.roster().names;
+    for (std::size_t i = 0; i < names.size(); ++i)
+        seats[names[i]] = room.seatStatus(static_cast<SeatId>(i));
 
     json msg = {
         {"type", "state"},
@@ -87,25 +97,29 @@ void ChessEngine::onLeave(Room&, ConnId, SeatId) {
     // Membership is Room's to track; chess keeps no per-connection state.
 }
 
-void ChessEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view text) {
+void ChessEngine::onMessage(Room& room, ConnId conn, SeatId seat,
+                            std::string_view text) {
     json j = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (j.is_discarded() || !j.is_object() || !j.contains("type")) {
         room.send(conn, rejectMsg("bad_message"));
         return;
     }
-    if (j.value("type", "") != "proposeMove") {
+    // strField never throws on an unexpected JSON type, so a malformed payload
+    // (e.g. {"type":123}) is rejected, not fatal.
+    if (strField(j, "type") != "proposeMove") {
         room.send(conn, rejectMsg("unknown_type"));
         return;
     }
 
-    // Parse the proposed move out of the opaque payload.
-    if (!j.contains("move") || !j["move"].is_object()) {
+    // Parse the proposed move out of the opaque payload, every field type-checked.
+    auto mvIt = j.find("move");
+    if (mvIt == j.end() || !mvIt->is_object()) {
         room.send(conn, rejectMsg("bad_message"));
         return;
     }
-    const auto& mj = j["move"];
-    auto from = chess::squareFromString(mj.value("from", ""));
-    auto to = chess::squareFromString(mj.value("to", ""));
+    const json& mj = *mvIt;
+    auto from = chess::squareFromString(strField(mj, "from"));
+    auto to = chess::squareFromString(strField(mj, "to"));
     if (!from || !to) {
         room.send(conn, rejectMsg("bad_message"));
         return;
@@ -113,13 +127,23 @@ void ChessEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view te
     chess::Move move;
     move.from = *from;
     move.to = *to;
-    if (mj.contains("promotion") && mj["promotion"].is_string())
-        move.promotion = promoFromString(mj["promotion"].get<std::string>());
+    move.promotion = promoFromString(strField(mj, "promotion"));
+
+    // You must hold a seat to move at all. The "lone player drives both sides"
+    // allowance below is for a *seated* player to play an open side — not for an
+    // unseated spectator to move pieces. Without this guard an open side-to-move
+    // seat (owner 0, not held) would accept moves from any connected socket,
+    // including one that never sent `join` (DESIGN §9.3: never trust an unseated
+    // connection).
+    if (seat == kNoSeat) {
+        room.send(conn, rejectMsg("not_seated", move));
+        return;
+    }
 
     // Authority is derived from the connection and the side to move — never from
     // a client-supplied seat (DESIGN §9.3). The acting seat is the side to move;
     // you may move it only if you hold that seat, or it is fully open (the
-    // lone-player case).
+    // lone-player case — a seated player driving both sides).
     SeatId turnSeat = position_.sideToMove() == chess::Color::White ? kWhite : kBlack;
     ConnId owner = room.connOfSeat(turnSeat);
     const char* status = room.seatStatus(turnSeat);
@@ -130,7 +154,7 @@ void ChessEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view te
     }
     // A held (disconnected) seat is reserved: nobody — not even the opponent — may
     // move for an offline player until it's reclaimed or admin-freed (DESIGN §13).
-    if (owner == 0 && std::string(status) == "disconnected") {
+    if (owner == 0 && std::strcmp(status, "disconnected") == 0) {
         room.send(conn, rejectMsg("seat_disconnected", move));
         return;
     }

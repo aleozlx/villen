@@ -3,7 +3,6 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
-#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -25,14 +24,6 @@
 
 namespace villen::admin {
 namespace {
-
-// Monotonic millisecond clock for IEngine::onTick (matches main.cpp's headless
-// loop). Real-time engines use only deltas, so the epoch is irrelevant.
-std::uint64_t nowMs() {
-    using namespace std::chrono;
-    return static_cast<std::uint64_t>(
-        duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
-}
 
 // The shell is a top-level view router in the one loop (admin-shell §2): the
 // launcher home, a system-info view, and the active engine's view. "Opens a
@@ -300,6 +291,14 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
     SDL_GL_MakeCurrent(win, gl);
     SDL_GL_SetSwapInterval(1);  // vsync paces the loop ~60 Hz
 
+    // Explicitly open detected controllers so Steam Input button events reach SDL
+    // reliably (the Deck's gameplay-pad path), rather than relying on the ImGui
+    // backend to auto-open them. Closed at shutdown below.
+    std::vector<SDL_GameController*> pads;
+    for (int i = 0; i < SDL_NumJoysticks(); ++i)
+        if (SDL_IsGameController(i))
+            if (SDL_GameController* p = SDL_GameControllerOpen(i)) pads.push_back(p);
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -339,8 +338,9 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
         else
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-        ws.poll(0);     // drain the network on the SAME thread as the UI (§5)
-        host.tick(nowMs());  // advance real-time engines (filter, snake) per frame
+        ws.poll(0);                 // drain the network on the SAME thread as the UI (§5)
+        host.tick(SDL_GetTicks());  // advance real-time engines (onTick) every frame —
+                                    // SDL_GetTicks is a monotonic ms clock since init
 
         // A real-time engine may have made its own GL context current this tick
         // (filter's surfaceless-EGL compute context, §6). Re-bind the admin SDL
@@ -374,6 +374,7 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+    for (SDL_GameController* p : pads) SDL_GameControllerClose(p);
     SDL_GL_DeleteContext(gl);
     SDL_DestroyWindow(win);
     SDL_Quit();

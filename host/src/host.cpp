@@ -26,6 +26,7 @@ void Host::startEngine(std::size_t index) {
     stopEngine();  // guarantee a clean slate before constructing the next
 
     active_ = engines_[index]->create();          // ctor acquires the engine's resources
+    if (!active_) return;                          // creation failed: stay at the launcher
     room_ = std::make_unique<Room>(ws_, *active_, active_->seats());
     active_->attach(*room_);                       // admin actions can now reach transport
     activeIndex_ = index;
@@ -37,8 +38,10 @@ void Host::startEngine(std::size_t index) {
 void Host::stopEngine() {
     if (!active_) return;
     activeIndex_ = static_cast<std::size_t>(-1);
-    room_.reset();    // membership first (no more dispatch targets)
-    active_.reset();  // dtor releases the engine's resources (admin-shell §4)
+    active_->detach();  // null the engine's Room* before the Room dies, so the
+                        // engine destructor can't use-after-free it
+    room_.reset();      // membership first (no more dispatch targets)
+    active_.reset();    // dtor releases the engine's resources (admin-shell §4)
 
     installCallbacks();
     announceAll();  // tell clients we're back at the launcher (engine: null)

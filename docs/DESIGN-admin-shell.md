@@ -134,12 +134,20 @@ the active engine so the page can show the right thing:
 { "type": "engine", "name": null }        // launcher / no engine running
 ```
 
-- The served landing page reads this and **loads the matching client view module**
-  (each engine ships its own `client/<engine>/` view; the board, the canvas, the jam
-  grid, …). On `null` it shows a friendly "no game running — ask the host to start one."
-- **Simplest MVP:** a switch may just drop player connections and let them reconnect into
-  the new engine's view; live migration of an in-flight connection is a polish item
-  (§11).
+- **The host serves the active engine's own client** (its `clientDir()`,
+  [game-framework §4](DESIGN-game-framework.md)): while snake is active the host's static
+  root *is* snake's client, so hitting the URL returns snake's page — the board, the
+  canvas, the jam grid, …. There is **no in-browser view-router**; each engine ships a
+  complete client and "switching" just changes what the host serves. A connected page
+  reads the `engine` announce only to *react* to a switch (next bullet), not to route.
+- **Across a switch, clients reconnect/reload into the new engine's client** — the announce
+  (or simply the dropped socket) tells a stale page to reload and fetch the now-active
+  engine's page. In-place live migration of an open connection is an explicit non-goal
+  (§11). On `null` (launcher) the host serves a friendly "no game running — ask the host to
+  start one" placeholder.
+- The shared `villen-client.js` (connect/join/reconnect, §2) is **library reuse** every
+  engine's client imports — not a router; the routing question below is settled by serving
+  per-engine clients, not by swapping modules in one page.
 
 Authority and privacy are unchanged per engine (each engine keeps its own contract —
 chess/snake/canvas/jam broadcast, filter/chat are private).
@@ -242,8 +250,11 @@ So engines built in parallel stay consistent, fix this now:
   reaches the SDL/ImGui window as mouse input (the touch-first model §6 assumes it);
   verify in the system-info pass (§7). *(The earlier gamepad-Home clash is resolved by the
   touch-first decision.)*
-- **Client-side multi-engine routing** — one landing page that swaps view modules vs. a
-  redirect per engine; how an in-flight connection migrates vs. reconnects (§5).
+- **Client-side multi-engine routing — decided:** there is *no* in-browser router. The
+  host serves the active engine's own client (`clientDir()`) and clients reconnect/reload
+  across a switch — not one landing page swapping view modules in place (§5). What remains
+  open is only the switch *mechanism* (proactive `engine`-announce reload vs. just dropping
+  the socket) and remembering the last engine (below).
 - **In-process teardown reliability** — verify `filter`'s EGL context and `chat`'s
   `llama-server` fully release between switches; if not, escalate to relaunch-per-engine
   (§10).

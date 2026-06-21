@@ -29,6 +29,14 @@ double msBetween(clock_t::time_point a, clock_t::time_point b) {
     return std::chrono::duration<double, std::milli>(b - a).count();
 }
 
+// Read a string field from untrusted client JSON without throwing: a value of the
+// wrong JSON type (or a missing key) yields "" rather than a json::type_error that
+// would crash the server (DoS) — mirrors chess_engine.cpp / envelope.cpp.
+std::string strField(const json& j, const char* key) {
+    auto it = j.find(key);
+    return (it != j.end() && it->is_string()) ? it->get<std::string>() : std::string();
+}
+
 // --- the 8-byte media header (§5.2): [u32 seq][u16 w][u16 h], little-endian ---
 std::uint32_t readU32LE(const char* p) {
     const auto* u = reinterpret_cast<const unsigned char*>(p);
@@ -177,9 +185,11 @@ void FilterEngine::onMessage(Room&, ConnId, SeatId, std::string_view text) {
     // server stays the authority (§5.2/§7). Unknown types are ignored.
     json j = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (j.is_discarded() || !j.is_object()) return;
-    if (j.value("type", "") != "requestPreset") return;
+    // strField never throws on an unexpected JSON type, so a malformed payload
+    // (e.g. {"type":123}) is ignored, not fatal.
+    if (strField(j, "type") != "requestPreset") return;
 
-    filter::Pipeline p = filter::presets::byName(j.value("preset", ""));
+    filter::Pipeline p = filter::presets::byName(strField(j, "preset"));
     if (!p.stages.empty()) {  // honour a known preset; ignore an unknown one
         pipeline_ = std::move(p);
         pushConfig();
