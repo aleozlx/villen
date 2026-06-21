@@ -62,7 +62,7 @@ These are load-bearing. A change that breaks one is blocking, however small.
   every field is type-checked (`is_string()` etc.) before use — never `value()` /
   `get<>()` on a key whose type a hostile client controls, which would throw and
   kill the single loop (a DoS). See `host/src/envelope.cpp` and `strField` in
-  `chess_engine.cpp` for the pattern.
+  `host/src/engines/chess/chess_engine.cpp` for the pattern.
 - **No local infrastructure details in commits** — personal IPs, hostnames,
   account names, keys. Generic Steam Deck / SteamOS facts are fine.
 
