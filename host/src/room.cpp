@@ -99,7 +99,9 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
         // membership (onLeave kNoSeat) before the new onJoin(s), so the engine
         // sees a balanced leave→join and never two onJoins for one onLeave. A
         // first/direct seat join isn't a member yet, so this is a no-op then.
-        if (members_.count(id)) { engine_.onLeave(*this, id, kNoSeat); }
+        if (members_.count(id)) {
+            engine_.onLeave(*this, id, kNoSeat);
+        }
         seats_[s].conn = id;
         seats_[s].held = false;  // clears any disconnected hold on reclaim
         ws_.send(id, envelope::joined(session_, roster_.names[s]));
@@ -147,7 +149,9 @@ void Room::onClose(ConnId id) {
     // onJoin/onLeave pair stays symmetric for spectators too, framework §4).
     auto it = members_.find(id);
     if (it != members_.end()) {
-        if (!wasSeated) { engine_.onLeave(*this, id, kNoSeat); }
+        if (!wasSeated) {
+            engine_.onLeave(*this, id, kNoSeat);
+        }
         members_.erase(it);
     }
     if (changed) broadcastSeats();
