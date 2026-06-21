@@ -445,7 +445,9 @@ on the PC); steps 3–5 add the real backend; step 7 retires the APU/memory unkn
 
 - **Tool / function calling** — let the model *act*: "start a new chess game",
   "switch to the gradient filter", surfacing the host's own engines as tools. The
-  highest-leverage follow-on and a uniquely Villen demo.
+  highest-leverage follow-on and a uniquely Villen demo. Its most ambitious (and most
+  dangerous) extension — the model patching Villen's own minor bugs — is explored in
+  [`DESIGN-self-hotfix.md`](DESIGN-self-hotfix.md); ship it last, behind the others.
 - **Unify with the chess LLM mover** (spectator §5): one inference subsystem behind
   both `chat` and an AI seat. Keep the §12 seam neutral so this is additive.
 - **Model-switch latency / hot-swap** — keep a model warm vs. restart-to-switch;
