@@ -23,6 +23,10 @@ void Room::send(ConnId id, std::string_view bytes, Delivery) {
 
 void Room::broadcast(std::string_view bytes, Delivery) { ws_.broadcast(bytes); }
 
+void Room::sendBinary(ConnId id, std::string_view bytes, Delivery) {
+    ws_.sendBinary(id, bytes);  // per-connection only, never broadcast (§10.1)
+}
+
 SeatId Room::seatOf(ConnId id) const {
     if (id == 0) return kNoSeat;
     for (SeatId s = 0; s < static_cast<SeatId>(seats_.size()); ++s)
@@ -75,6 +79,13 @@ void Room::onMessage(ConnId id, std::string_view text) {
     // opaque engine payload. Villen does not judge it; the engine parses and may
     // reject it. The acting seat is derived here, never trusted from the client.
     engine_.onMessage(*this, id, seatOf(id), text);
+}
+
+void Room::onBinary(ConnId id, std::string_view bytes) {
+    // Binary frames are pure media — never an envelope — so they go straight to
+    // the engine with the connection's derived seat (DESIGN-filter §5.1). A feed
+    // need not be seated (filter has no seats, §7); seatOf is kNoSeat then.
+    engine_.onBinary(*this, id, seatOf(id), bytes);
 }
 
 void Room::handleJoin(ConnId id, const std::string& requested) {

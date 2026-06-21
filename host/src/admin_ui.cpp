@@ -3,6 +3,8 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
+#include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -23,6 +25,14 @@
 
 namespace villen::admin {
 namespace {
+
+// Monotonic millisecond clock for IEngine::onTick (matches main.cpp's headless
+// loop). Real-time engines use only deltas, so the epoch is irrelevant.
+std::uint64_t nowMs() {
+    using namespace std::chrono;
+    return static_cast<std::uint64_t>(
+        duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
+}
 
 // The shell is a top-level view router in the one loop (admin-shell §2): the
 // launcher home, a system-info view, and the active engine's view. "Opens a
@@ -329,7 +339,8 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
         else
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-        ws.poll(0);  // drain the network on the SAME thread as the UI (§5)
+        ws.poll(0);     // drain the network on the SAME thread as the UI (§5)
+        host.tick(nowMs());  // advance real-time engines (filter, snake) per frame
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();

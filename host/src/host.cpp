@@ -65,6 +65,7 @@ void Host::installCallbacks() {
                 room->onOpen(id);
             },
             [room](ConnId id, std::string_view msg) { room->onMessage(id, msg); },
+            [room](ConnId id, std::string_view bytes) { room->onBinary(id, bytes); },
             [room](ConnId id) { room->onClose(id); },
         });
     } else {
@@ -72,6 +73,7 @@ void Host::installCallbacks() {
         // (a client just waits for the operator to start an engine).
         ws_.setCallbacks({
             [this](ConnId id) { announce(id); },
+            [](ConnId, std::string_view) {},
             [](ConnId, std::string_view) {},
             [](ConnId) {},
         });
