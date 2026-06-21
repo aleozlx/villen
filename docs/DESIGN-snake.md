@@ -125,6 +125,7 @@ grows a **fixed-timestep accumulator**:
 // ChatEngine had tick() do nothing heavy; SnakeEngine::tick() advances the world.
 void SnakeEngine::tick() {
   acc_ += loopDtMs();                       // wall time since last iteration
+  if (acc_ > maxCatchUpMs_) acc_ = maxCatchUpMs_;  // clamp after a stall — no spiral of death
   while (acc_ >= tickMs_) {                 // tickMs_ ≈ 80–125ms (8–12 Hz)
     world_.step(drainLatestInputs());       // one authoritative step
     broadcastState();                       // full grid to everyone (§5)
@@ -141,6 +142,12 @@ void SnakeEngine::tick() {
   engine keeps **only the latest legal one** per player (you can't reverse into your
   own neck), applied at the next `step()`. This is the real-time analog of `filter`'s
   drop-to-latest, for control instead of pixels.
+- **Clamp after a stall.** The Deck can suspend/resume (or hitch) for far longer than a
+  tick; an unbounded `acc_` would then fire a burst of catch-up steps — the classic
+  **spiral of death**, where the catch-up work itself causes the next stall. Clamping
+  `acc_` to a small cap (`maxCatchUpMs_`, a few ticks) bounds a long pause to one brief
+  skip instead of a runaway loop. Snake doesn't need true catch-up, so the cap can be
+  tight.
 - **Still single-threaded, still lock-free** (§5). The clock is just the loop noticing
   wall-time has crossed a tick boundary. No `chat`-style guarded queue is needed
   because nothing blocks.

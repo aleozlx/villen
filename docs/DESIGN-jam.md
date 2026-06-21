@@ -71,8 +71,10 @@ heart of this engine — is **schedule, don't trigger**: never play a sound when
 message *arrives*; play it at a *pre-computed time* on a synced clock. Two pieces:
 
 1. **Estimate the host clock (NTP-lite).** The client periodically pings the host
-   (`{type:"clockReq", t0}` → `{type:"clockRes", t0, tServer}`), measures round-trip,
-   and estimates `offset = tServer + rtt/2 − tClient`. A few samples, keep the low-RTT
+   (`{type:"clockReq", t0}` → `{type:"clockRes", t0, tServer}`), notes its own
+   response-arrival time `t2`, and estimates `offset = tServer − (t0 + t2)/2`
+   (equivalently `tServer − t0 − rtt/2`, with `rtt = t2 − t0`) — the standard NTP
+   single-sample form, which assumes symmetric latency. A few samples, keep the low-RTT
    ones — millisecond-class on a LAN. The host broadcasts its **transport epoch**:
    "beat 0 of the current play started at host-time T, BPM = B."
 2. **Look-ahead scheduling (Web Audio's "tale of two clocks").** A ~25 ms timer in the

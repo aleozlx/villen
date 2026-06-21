@@ -91,13 +91,14 @@ Exactly one `IEngine` is instantiated at any moment; the launcher is the state w
 > Mode a game doesn't restart *itself* — the **launcher hands off** to the engine within
 > the one process, and Home hands back. One binary, one loop, as everywhere else.
 
-The host owns the `WsServer`, a **nullable** `IEngine* active_`, and the `view_` state.
+The host owns the `WsServer`, a **nullable** `std::unique_ptr<IEngine> active_`, and the
+`view_` state.
 
 ```cpp
 // pick from the launcher
 void startEngine(EngineKind k) {
   active_ = makeEngine(k, ws_);                 // construct (e.g. FilterEngine opens its
-  ws_.setCallbacks(routeTo(active_));           //  EGL ctx; ChatEngine spawns llama-server)
+  ws_.setCallbacks(routeTo(active_.get()));     //  EGL ctx; ChatEngine spawns llama-server)
   broadcastEngineChanged(k);                    // tell connected clients (§5)
   view_ = View::Engine;
 }
@@ -113,7 +114,9 @@ void stopEngine() {
 - **Clean teardown is a hard requirement** on every engine's destructor: `filter`
   releases its EGL context, `chat` terminates and reaps `llama-server`, `snake`/`canvas`/
   `jam` drop their state. The next engine must start from a clean slate. (This is the
-  one real cost of in-process switching — see the rejected alternative in §10.)
+  one real cost of in-process switching — see the rejected alternative in §10.) For this
+  to hold through the base pointer, `IEngine` declares `virtual ~IEngine() = default;` so
+  `active_.reset()` runs the concrete engine's destructor, not just the interface's.
 - **`--engine X` still works**: with the flag, the host **boots straight into engine X**
   and the launcher is skipped (kiosk / headless / CI / dev). With **no flag and a
   display**, the host boots to the **launcher**. Headless with no flag keeps today's

@@ -127,6 +127,13 @@ every `op` after it. The client paints the snapshot, then applies ops — conver
 exactly, no replay-from-zero. Authority is server-side (chess §3.2): clients send
 ops; the host decides order and is the only writer of the raster.
 
+The **host** side is race-free for free: §5's single thread captures the raster and the
+`seq` cut-line in one uninterrupted step, so no op straddles the boundary. The **client**
+covers its own decode window — `op` frames keep arriving while the PNG is still
+decoding, so it **buffers** incoming ops until the snapshot is painted, then applies the
+buffered ones with `seq > snapshotSeq` in order (discarding any `≤`, already baked into
+the raster). Without that buffer a late op could be dropped or doubly applied.
+
 ---
 
 ## 5. iPad / touch as a first-class client
