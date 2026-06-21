@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "engine.hpp"
@@ -47,6 +48,13 @@ struct ChatBackendConfig {
     std::string modelsDir;    // --models-dir → scan for switchable GGUFs (§5)
     int ngl = 99;             // -ngl GPU layers (§6)
     int parallel = 2;         // --parallel slots (§8)
+    // Operator-supplied model id → GGUF path map (§11; weights are not shipped),
+    // from repeated --model-path id=path. The admin console's Load/Switch (§9)
+    // resolves the selected model id to a path here and restarts llama-server
+    // with it. --models-dir fills any gaps by matching filenames (scanModels),
+    // never overwriting an explicit entry. The startup model is `model`, else the
+    // first knownModels() id that has a path.
+    std::vector<std::pair<std::string, std::string>> modelPaths;
 };
 
 class ChatEngine : public IEngine {
@@ -63,23 +71,11 @@ class ChatEngine : public IEngine {
     void drawAdmin() override;
     void reset() override;                             // stop all + clear
 
-    // --- model-switching seam (§5; the admin console, step 6, drives this) ------
-    // A model the operator can select: a GGUF found in --models-dir (or the --model
-    // file) matched to a known model id/family. Switching is operator-only (§7/§11),
-    // never a client message.
-    struct AvailableModel {
-        std::string id;           // wire id (chatConfig.model), e.g. "qwen2.5-7b-instruct"
-        std::string displayName;  // human label for the admin combo
-        std::string path;         // GGUF passed to llama-server -m
-        chat::ModelFamily family;
-    };
-    const std::vector<AvailableModel>& availableModels() const { return available_; }
-    const std::string& activeModel() const { return model_; }
-    // Switch the resident model by id: respawn llama-server with its GGUF, abort
-    // in-flight generations, and re-handshake clients (new chatConfig). False if the
-    // id isn't available or we don't manage the server (connect-only/stub/down).
-    bool setActiveModel(const std::string& id);
-    void cycleModel();  // advance to the next available model (headless: SIGUSR1)
+    // Headless operator control (§5): advance to the next model with a configured
+    // GGUF and load it via the normal switch path. The Game-Mode operator uses the
+    // admin console combo instead; this is the SIGUSR1 trigger for the SSH/headless
+    // Deck. Public because main()'s signal pump calls it through the active engine.
+    void cycleModel();
 
  private:
     enum class Mode { Down, Stub, Llama };
@@ -93,14 +89,25 @@ class ChatEngine : public IEngine {
     int contextMax_ = 8192;
     float temperature_ = 0.7f;
     float topP_ = 0.95f;
+    int topK_ = 40;
     int maxTokens_ = 512;
+    float repeatPenalty_ = 1.1f;
+
+    // Admin console (§9) state: the model the operator has picked in the combo but
+    // not yet committed (Load/Switch applies it), and the last load's feedback.
+    std::string pendingModel_ = model_;
+    std::string loadError_;
+    // Operator-supplied model id → GGUF path (from --model-path / --models-dir /
+    // --model). Empty path / missing id ⇒ that model can't be loaded (no weights
+    // shipped, §11).
+    std::unordered_map<std::string, std::string> modelPaths_;
+    // Last backend-ready state pushed to clients, so onTick broadcasts chatConfig
+    // only when readiness flips (a (re)load finished or the model went away).
+    bool readyBroadcast_ = false;
 
     Mode mode_ = Mode::Down;
     std::unique_ptr<chat::LlamaClient> llama_;     // set in Llama mode
     std::unique_ptr<chat::LlamaProcess> process_;  // set when we spawn llama-server
-
-    std::vector<AvailableModel> available_;  // switchable models (spawn mode only, §5)
-    bool readyBroadcast_ = false;            // last backend-ready state pushed to clients
 
     // Per-connection, per-convId conversation state — private, in RAM only (§11).
     std::unordered_map<ConnId,
@@ -116,6 +123,7 @@ class ChatEngine : public IEngine {
         int msgId = 0;
         std::string acc;             // reply so far; appended to the conv on done
         std::uint64_t startMs = 0;   // first-token time, for tok/s
+        int emitted = 0;             // deltas streamed so far (live admin tok/s, §9)
         bool stub = false;
         // Stub timer:
         std::vector<std::string> tokens;
@@ -144,11 +152,22 @@ class ChatEngine : public IEngine {
     std::string configJson() const;                            // chatConfig (§7)
     bool backendReady() const;                                 // chatConfig.ready
 
-    // Build the switchable-model registry from a GGUF directory (§5): each *.gguf
-    // whose filename matches a known model id/family becomes an AvailableModel.
+    // Fill any gaps in modelPaths_ from a GGUF directory (§5): each *.gguf whose
+    // filename matches a known model id/family (chat::matchModelByFilename) is
+    // registered — but never overwriting an explicit --model-path entry.
     void scanModels(const std::string& dir);
-    void addAvailable(const chat::ModelInfo&, std::string path);  // dedup by id, path wins
-    const AvailableModel* findAvailable(const std::string& id) const;
+
+    // GGUF path for a model id, or "" if the operator configured none (§11).
+    std::string pathForModel(const std::string& id) const;
+    // Operator "Load/Switch" (§9): commit pendingModel_ as the active model, push
+    // chatConfig, and (in spawn mode) restart llama-server with its GGUF.
+    void loadPendingModel();
+    // Operator "Stop all" (§9): abort every in-flight generation (keep the
+    // conversations); reset() additionally clears the conversations ("new game").
+    void stopAll();
+    void drawAdmin_ModelPanel();   // §9 model select/switch + llama-server health
+    void drawAdmin_ParamsPanel();  // §9 generation params + system-prompt editor
+    void drawAdmin_StatsPanel();   // §9 live stats (metadata only — privacy, §11)
 };
 
 class ChatFactory : public IEngineFactory {

@@ -8,10 +8,12 @@
 // from the single main loop (tick), no thread (§5).
 //
 // One model resident at a time (§5): switching models = restart the child with a
-// new -m (setModel, step 5). The admin console (§9, step 6) drives it; -ngl
-// tuning still lands there.
+// new -m. The admin console (§9, step 6) drives this through switchModel() /
+// restart() / stop(), and reads pid()/ngl()/residentKb()/switchLatencyMs() for
+// the health panel.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <sys/types.h>
@@ -26,6 +28,7 @@ struct LlamaSpawnConfig {
     int port = 8080;
     int ngl = 99;               // -ngl: GPU layers (offload all; tuned later §6)
     int parallel = 2;           // --parallel N: concurrent slots (§8)
+    int ctxSize = 0;            // -c N: context tokens (0 = llama-server default)
     std::vector<std::string> extraArgs;
 };
 
@@ -40,24 +43,48 @@ class LlamaProcess {
     // restart with backoff), probe /health to flip ready(). Call from onTick.
     void tick(std::uint64_t nowMs);
 
-    // Switch the resident model (§5): respawn the child with a new -m. The current
-    // child is signalled here and reaped non-blocking by tick(); ready() stays
-    // false until the new model loads. No-op if modelPath is empty or unchanged.
-    void setModel(std::string modelPath);
+    // --- operator controls (admin console §9, step 6) ------------------------
+    // All non-blocking and idiomatic to the one loop: each only SIGTERMs the
+    // child and flips state; the next tick()s reap (WNOHANG) and respawn. So the
+    // admin UI never stalls the loop waiting on a model unload/reload (§5).
+
+    // Load a different model: set -m and restart the child (one model at a
+    // time, §5). ready() goes false until the new model passes /health.
+    void switchModel(std::string modelPath, std::uint64_t nowMs);
+    // Restart with the *same* model — operator "Restart" (a wedged server, an
+    // -ngl/context change that needs a fresh process).
+    void restart(std::uint64_t nowMs);
+    // Unload: terminate the child and keep it down (frees the weights' memory)
+    // until the next switchModel()/restart(). The §9 "Unload" control.
+    void stop(std::uint64_t nowMs);
+    // -c context tokens for the *next* (re)spawn — the console sets this from the
+    // operator's context-window value; it takes effect on switchModel()/restart().
+    void setContextSize(int n) { cfg_.ctxSize = n; }
 
     bool ready() const { return ready_; }     // /health returned 200 (model up)
     bool running() const { return pid_ > 0; }
+    bool paused() const { return paused_; }    // stop()ped, awaiting a load
+    bool switching() const { return switchStartMs_ != 0; }  // reload in flight
+    std::uint64_t switchLatencyMs() const { return lastSwitchMs_; }  // last reload
+    pid_t pid() const { return pid_; }
     int port() const { return cfg_.port; }
+    int ngl() const { return cfg_.ngl; }
+    int parallel() const { return cfg_.parallel; }
+    int ctxSize() const { return cfg_.ctxSize; }
     const std::string& model() const { return cfg_.model; }
     const std::string& lastError() const { return lastError_; }
+    std::size_t residentKb() const;  // child RSS from /proc; 0 if unavailable
 
  private:
     LlamaSpawnConfig cfg_;
     pid_t pid_ = -1;
     bool ready_ = false;
-    bool draining_ = false;           // killing the old child mid-switch; skip /health
+    bool paused_ = false;             // stop()ped: don't respawn until told to
+    bool restarting_ = false;         // the next reap is intentional, not a crash
     std::uint64_t nextSpawnMs_ = 0;   // backoff gate after a death
     std::uint64_t nextHealthMs_ = 0;  // throttle for health probes
+    std::uint64_t switchStartMs_ = 0; // reload timer start; 0 = not switching
+    std::uint64_t lastSwitchMs_ = 0;  // duration of the last completed reload
     std::string lastError_;
 
     void spawn(std::uint64_t nowMs);
