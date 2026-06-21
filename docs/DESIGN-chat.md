@@ -415,11 +415,16 @@ Cheap now, painful to retrofit (mirrors DESIGN §9, `filter` §11):
 Steps 1–2 deliver the full streaming UX with **no inference and no Deck risk** (all
 on the PC); steps 3–5 add the real backend; step 7 retires the APU/memory unknowns.
 
-**Status (first Deck bring-up).** Steps 1–4 are implemented and verified on the
-device: Qwen2.5-7B-Instruct-Q4_K_M streams end to end over **RADV Vulkan** on the
+**Status (first Deck bring-up).** Steps 1–6 are implemented; 1–5 are verified on the
+device. Qwen2.5-7B-Instruct-Q4_K_M streams end to end over **RADV Vulkan** on the
 Vangogh APU (real token streaming, multi-turn context, reset, and llama-server
-crash-restart all confirmed). Steps 5–7 remain. Engineering refinements found while
-building 1–4 are tracked in §18.
+crash-restart all confirmed), and live model switching across all three template
+families (Llama-3 headers / ChatML / Mistral `[INST]`) renders cleanly with no
+leaked special tokens (step 5). The admin console — model select/switch, params,
+stats, queue, restart (step 6) — is built. Step 7's Deck APU/Vulkan throughput
+spike harness has landed (`spike/chat-bench/`); recording its tok/s and
+memory-headroom numbers on the device (§15.6) is the remaining acceptance item.
+Engineering refinements found while building are tracked in §18.
 
 ---
 
