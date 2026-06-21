@@ -172,7 +172,7 @@ void checkBalanced(const std::vector<RecordingEngine::Ev>& evs, bool departed) {
             joined = false;
         }
     }
-    if (departed) CHECK_FALSE(joined);  // balanced once the conn has closed
+    if (departed) { CHECK_FALSE(joined); }  // balanced once the conn has closed
 }
 
 }  // namespace
