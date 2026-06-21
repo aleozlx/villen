@@ -18,6 +18,7 @@
 
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "engine.hpp"
@@ -68,6 +69,13 @@ class Room {
     SeatRoster roster_;
     std::vector<Seat> seats_;
     std::string session_ = "default";
+
+    // Every connection the engine has seen onJoin for (seated or spectator), so
+    // onClose can fire a matching onLeave for unseated members too. Per-connection
+    // engines (chat, filter) keep state keyed by ConnId, not by seat, and need the
+    // departure signal to release it (privacy, DESIGN-chat §11); seat-based engines
+    // (chess) simply ignore a kNoSeat onLeave.
+    std::unordered_set<ConnId> members_;
 
     void handleJoin(ConnId, const std::string& requested);
     void broadcastSeats();  // the sessionUpdate envelope

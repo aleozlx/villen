@@ -83,6 +83,7 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
     SeatId current = seatOf(id);
     if (current != kNoSeat) {
         ws_.send(id, envelope::joined(session_, roster_.names[current]));
+        members_.insert(id);
         engine_.onJoin(*this, id, current);
         return;
     }
@@ -97,6 +98,7 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
         seats_[s].conn = id;
         seats_[s].held = false;  // clears any disconnected hold on reclaim
         ws_.send(id, envelope::joined(session_, roster_.names[s]));
+        members_.insert(id);
         engine_.onJoin(*this, id, s);
         broadcastSeats();
     };
@@ -116,6 +118,7 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
 
     // Requested seat is live/held-by-someone, or the table is full: spectate.
     ws_.send(id, envelope::joined(session_, "spectator"));
+    members_.insert(id);
     engine_.onJoin(*this, id, kNoSeat);
 }
 
@@ -123,14 +126,24 @@ void Room::onClose(ConnId id) {
     // Hold the seat across the disconnect rather than vacating it: the dropped
     // player keeps their side reserved (status "disconnected") so the opponent
     // can't seize it, until they reconnect or the admin re-opens it (DESIGN §13).
+    bool wasSeated = false;
     bool changed = false;
     for (SeatId s = 0; s < static_cast<SeatId>(seats_.size()); ++s) {
         if (seats_[s].conn == id) {
             seats_[s].conn = 0;
             seats_[s].held = true;
             engine_.onLeave(*this, id, s);
+            wasSeated = true;
             changed = true;
         }
+    }
+    // An unseated member (spectator) got an onJoin but no seat to hold; fire its
+    // onLeave so per-connection engines can release the connection's state (the
+    // onJoin/onLeave pair stays symmetric for spectators too, framework §4).
+    auto it = members_.find(id);
+    if (it != members_.end()) {
+        if (!wasSeated) engine_.onLeave(*this, id, kNoSeat);
+        members_.erase(it);
     }
     if (changed) broadcastSeats();
 }
