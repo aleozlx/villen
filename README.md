@@ -78,7 +78,8 @@ the network and the UI on one thread, so there is no shared-state locking
 The in-process admin UI (session/seat table, join URL + QR), reflecting a player
 connected over WebSocket on the same thread:
 
-![Villen admin UI](docs/admin-ui.png)
+> **[TODO]** screenshot of the in-process admin UI — the previous one went stale
+> quickly; capture a fresh one from the Deck and drop it back in here.
 
 ## Experimental engines (design drafts)
 
