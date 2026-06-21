@@ -178,8 +178,13 @@ class Server:
             if "llvmpipe" in low:
                 saw_llvmpipe = True
                 hits.append(ln.strip())
-            elif "ggml_vulkan" in low or "radv" in low or (
-                    "vulkan" in low and ("gpu" in low or "device" in low)):
+            elif "vulkan" in low:
+                # Any Vulkan device/backend line — `ggml_vulkan: ...` or the b9744
+                # device enumeration `- Vulkan0 : <vendor> ...`. Vendor-agnostic on
+                # purpose: AMD prints `(RADV VANGOGH)`, but an NVIDIA/Intel GPU on a
+                # PC self-test won't, and we still want `vulkan`. `llvmpipe`
+                # (software GL) is matched above with higher precedence, so reaching
+                # here means a real hardware Vulkan device.
                 saw_vulkan_dev = True
                 hits.append(ln.strip())
             elif "offloaded" in low and "layer" in low:
