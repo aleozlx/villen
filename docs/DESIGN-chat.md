@@ -52,10 +52,12 @@ spectator doc's "server-side LLM **mover**" wants for driving a chess seat (§12
 
 ## 2. Where it sits in the slot (and what's actually "pure")
 
-`chat` is a `ChatEngine : IEngine`, reusing the generalized slot introduced in
-[`DESIGN-filter.md`](DESIGN-filter.md) §2 (`onConnect`/`onText`/`onBinary`/`tick`/
-`drawAdmin`, engine chosen by `--engine chess|filter|chat`). Chat is text/JSON, so it
-needs only the existing **text** WS path — not even the binary path `filter` added.
+`chat` is a `ChatGame : villen::IGame` (the canonical contract,
+[`DESIGN-game-framework.md`](DESIGN-game-framework.md) §4 — `onJoin`/`onLeave`/
+`onMessage`/`onTick`/`drawAdmin`, via a `Room` handle), one game among several the
+launcher runs one at a time ([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md)). Chat is
+text/JSON, so it needs only the **text** WS path — not even the binary path `filter`
+added.
 
 The two-seam honesty (`filter` §2) bends further here, and the doc says so plainly:
 
@@ -264,7 +266,7 @@ depth in the admin UI (§9).
 
 ## 9. The in-process admin UI (operator runs the model)
 
-`ChatEngine::drawAdmin()` replaces the chess table with a **model console** —
+`ChatGame::drawAdmin()` replaces the chess table with a **model console** —
 ImGui's home turf, gamepad-navigable on the Deck (the `NavEnableGamepad` path in
 [`admin_ui.cpp:183`](../host/src/admin_ui.cpp)):
 
@@ -279,7 +281,7 @@ ImGui's home turf, gamepad-navigable on the Deck (the `NavEnableGamepad` path in
   sensitive, §11). A content peek, if ever added, is an explicit opt-in toggle.
 
 In-process and privileged-by-construction (DESIGN §9.4): it reads/mutates the
-`ChatEngine` directly on the same thread, no admin socket.
+`ChatGame` directly on the same thread, no admin socket.
 
 ---
 
@@ -333,7 +335,7 @@ Cheap now, painful to retrofit (mirrors DESIGN §9, `filter` §11):
 3. **Per-connection routing and the streaming-delta pattern** are reused from
    `filter`; a future multi-user/group-chat or tool-calling mode rides them with no
    transport change.
-4. **The `IEngine` seam keeps the subprocess/thread plumbing inside `ChatEngine`** —
+4. **The `IGame` seam keeps the subprocess/thread plumbing inside `ChatGame`** —
    `main`, `ws_server`, and the loop stay engine-agnostic, so the inference
    subsystem never leaks into the host spine.
 
@@ -372,7 +374,7 @@ Cheap now, painful to retrofit (mirrors DESIGN §9, `filter` §11):
    the three-model prompt-templating table; doctest cases asserting exact rendered
    prompts and stop tokens per model. No llama, no host. *Proves the deterministic
    part.*
-2. **`ChatEngine` + WS messages against a STUB generator.** Wire `chatSend`/
+2. **`ChatGame` + WS messages against a STUB generator.** Wire `chatSend`/
    `chatDelta`/`chatDone` to a stub that echoes "you said: …" token-by-token on a
    timer. Browser client renders the stream. *Proves the streaming spine end to end
    with zero inference and zero GPU.*

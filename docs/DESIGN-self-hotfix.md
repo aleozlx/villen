@@ -53,7 +53,7 @@ needs:
   making it a supervisor (relaunch loop) is a few lines.
 - **Serializable, self-contained state** (DESIGN §9.2): a restart can dump and reload
   live sessions, so a hotfix needn't kick players off.
-- **Containment**: the `IEngine` slot (DESIGN-filter §2) means a fix scoped to one
+- **Containment**: the `IGame` slot (DESIGN-filter §2) means a fix scoped to one
   engine can't corrupt the others.
 - **A local brain**: the [`chat`](DESIGN-chat.md) engine + §17 tool-calling, running
   *on-device* — the appliance fixes itself without phoning home, consistent with the

@@ -15,7 +15,7 @@ admin UI that hands the gamepad to the engine while a game is in session (§6).
 **Scope:** the top-level structure of the operator UI on the Deck and how it selects,
 runs, and tears down a single engine.
 **Audience:** the agent building the shell, **and** every agent building an engine (read
-§8). Assumes [`DESIGN-filter.md`](DESIGN-filter.md) §2 (the `IEngine` slot) and
+§8). Assumes [`DESIGN-filter.md`](DESIGN-filter.md) §2 (the `IGame` slot) and
 [`DESIGN-villen.md`](DESIGN-villen.md) §5 (the single loop).
 
 ---
@@ -69,7 +69,7 @@ not OS windows — under Gamescope there is one fullscreen surface.
 
 ## 3. One engine active at a time (the load-bearing constraint)
 
-Exactly one `IEngine` is instantiated at any moment; the launcher is the state where
+Exactly one `IGame` is instantiated at any moment; the launcher is the state where
 **none** is. This is not a limitation to apologize for — it is correct for the appliance:
 
 - **Resource exclusivity.** `filter` wants the APU for GL compute; `chat` wants it for
@@ -85,19 +85,19 @@ Exactly one `IEngine` is instantiated at any moment; the launcher is the state w
 
 ---
 
-## 4. Lifecycle & host wiring (reconciling with `IEngine`)
+## 4. Lifecycle & host wiring (reconciling with `IGame`)
 
 > **Decided: in-process switching** (not relaunch-per-engine, §10). On the Deck in Game
 > Mode a game doesn't restart *itself* — the **launcher hands off** to the engine within
 > the one process, and Home hands back. One binary, one loop, as everywhere else.
 
-The host owns the `WsServer`, a **nullable** `IEngine* active_`, and the `view_` state.
+The host owns the `WsServer`, a **nullable** `IGame* active_`, and the `view_` state.
 
 ```cpp
 // pick from the launcher
 void startEngine(EngineKind k) {
-  active_ = makeEngine(k, ws_);                 // construct (e.g. FilterEngine opens its
-  ws_.setCallbacks(routeTo(active_));           //  EGL ctx; ChatEngine spawns llama-server)
+  active_ = makeEngine(k, ws_);                 // construct (e.g. FilterGame opens its
+  ws_.setCallbacks(routeTo(active_));           //  EGL ctx; ChatGame spawns llama-server)
   broadcastEngineChanged(k);                    // tell connected clients (§5)
   view_ = View::Engine;
 }

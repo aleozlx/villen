@@ -98,12 +98,12 @@ Host state, both serializable (DESIGN §9.2):
   total order (last toggle wins, everyone converges).
 
 ```cpp
-void JamEngine::onText(ConnId from, msg) {
+void JamGame::onText(ConnId from, msg) {
   if (toggle)   { pattern_.apply(toggle); ws_.broadcast(encode(toggle)); }   // canvas-style
   if (transport && operatorOrAllowed) { transport_.set(...); broadcastTransport(); }
   if (clockReq) ws_.send(from, clockRes(now()));                              // §3
 }
-void JamEngine::tick() {                      // snake-style, but musical & light
+void JamGame::tick() {                      // snake-style, but musical & light
   if (transport_.playing) advanceBarCounterFromWallClock();  // for the admin display only
   // No audio here. The host never synthesizes. Clients do.
 }
@@ -154,7 +154,7 @@ beat — friendly enough for kids, deep enough to jam.
 
 ## 7. Admin UI (the bandleader)
 
-`JamEngine::drawAdmin()`, gamepad-navigable: the playing step highlighted live; **BPM**,
+`JamGame::drawAdmin()`, gamepad-navigable: the playing step highlighted live; **BPM**,
 **play/stop**, **swing**, **steps (16/32)**, **clear**, per-track **mute**; active
 players + edit rate; and the measured **sync spread** across clients (max offset) so the
 operator can see the room is locked. In-process, direct state access (DESIGN §9.4). The
@@ -170,7 +170,7 @@ panel is just the engine-view body.)
   (it never synthesizes); the client uses the browser's built-in **Web Audio**. This is
   the cheapest engine to stand up.
 - **CMake:** `villen_jam` pure engine lib (transport + pattern + ops + tests, always
-  built, CI-tested, no I/O); the `JamEngine` adapter compiles into the host.
+  built, CI-tested, no I/O); the `JamGame` adapter compiles into the host.
 
 **Build order (smallest-spine-first):**
 1. **Pure engine + tests** — pattern ops + transport math (beat ↔ time); deterministic

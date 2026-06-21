@@ -1,7 +1,7 @@
 # Villen — the engine roadmap: how we choose what to build (design & index)
 
-> Villen's host is a **game-agnostic slot** (DESIGN intro, §9; the `IEngine` seam in
-> [`DESIGN-filter.md`](DESIGN-filter.md) §2). That means the interesting question is
+> Villen's host is a **game-agnostic slot** (DESIGN intro, §9; the `IGame` contract in
+> [`DESIGN-game-framework.md`](DESIGN-game-framework.md) §4). That means the interesting question is
 > never "what's a cool app to put in the slot?" but **"what *axis* of the architecture
 > does this engine stress that nothing else does?"** An engine earns its place by
 > proving the spine survives a load it hasn't faced. This doc records the **method**,
@@ -114,11 +114,11 @@ covered.
 - [`DESIGN-canvas.md`](DESIGN-canvas.md) — *shared-write contention.* Design.
 - [`DESIGN-jam.md`](DESIGN-jam.md) — *synchronized shared time.* Design.
 
-The generalized `IEngine` slot these all plug into is specified in
-[`DESIGN-filter.md`](DESIGN-filter.md) §2. An engine is selected at startup by
-`--engine chess|filter|chat|snake|canvas|jam`, or — on the Deck, at runtime — from the
-**launcher**, which runs exactly **one engine at a time**
-([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md); concurrent multi-engine is the
+The canonical `IGame` contract these all implement is specified in
+[`DESIGN-game-framework.md`](DESIGN-game-framework.md) §4. A game is selected at startup
+by `--engine chess|filter|chat|snake|canvas|jam`, or — on the Deck, at runtime — from
+the **launcher**, which runs exactly **one game at a time**
+([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md); running several concurrently is the
 deferred lobby idea, §6).
 
 ---

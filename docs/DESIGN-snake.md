@@ -17,7 +17,7 @@ multiplayer** engine fits the single-thread loop — inputs in, a tick advances 
 world, state broadcasts out.
 **Audience:** the agent standing this up, having read
 [`DESIGN-villen.md`](DESIGN-villen.md) and [`DESIGN-filter.md`](DESIGN-filter.md)
-(for the generalized `IEngine` slot, §2 there), and able to read the upstream Snake.
+(for the generalized `IGame` slot, §2 there), and able to read the upstream Snake.
 
 > **Why this engine earns its keep.** Chess advances only on a move; `filter` only
 > on a frame; `chat` only on a prompt — **every existing engine is purely reactive**,
@@ -122,8 +122,8 @@ is exactly what makes it a clean test of §5 rather than a violation of it. The 
 grows a **fixed-timestep accumulator**:
 
 ```cpp
-// ChatEngine had tick() do nothing heavy; SnakeEngine::tick() advances the world.
-void SnakeEngine::tick() {
+// ChatGame had tick() do nothing heavy; SnakeGame::tick() advances the world.
+void SnakeGame::tick() {
   acc_ += loopDtMs();                       // wall time since last iteration
   while (acc_ >= tickMs_) {                 // tickMs_ ≈ 80–125ms (8–12 Hz)
     world_.step(drainLatestInputs());       // one authoritative step
@@ -224,7 +224,7 @@ smoothness; show scores and your snake's color. Input via **touch-swipe / on-scr
 D-pad / arrow keys / Gamepad API**, all calling one `submitInput(dir)` (DESIGN §7).
 Big, friendly, high-contrast — it's for kids.
 
-**Admin** (`SnakeEngine::drawAdmin()`, gamepad-navigable): the arena at a glance —
+**Admin** (`SnakeGame::drawAdmin()`, gamepad-navigable): the arena at a glance —
 players + scores + AI count + tick rate; controls for **start/pause/reset**, **grid
 size**, **speed** (`tickMs`), **wrap on/off**, **collision leniency**, and **add/remove
 AI snake**. The operator runs the playground.
@@ -237,14 +237,14 @@ AI snake**. The operator runs the playground.
   **lightest** of the new engines. The pure engine is plain C++; the host adapter
   reuses the existing WS edge and the client's gamepad code.
 - **CMake:** `villen_snake` pure engine lib (always built, CI-tested, no I/O), like
-  `villen_engine`/`villen_filter`; the `SnakeEngine` adapter compiles into the host.
+  `villen_engine`/`villen_filter`; the `SnakeGame` adapter compiles into the host.
 - **Cross-build/glibc** caveats are unchanged (steamdeck-debugging.md §2) but trivial
   here — no exotic symbols.
 
 **Build order (smallest-spine-first):**
 1. **Pure engine + tests** — port `snake2`'s sim into `engine/snake/`; deterministic
    `step()`; replay tests (wrap, eat, lenient collisions). *No host.*
-2. **Tick in the loop + broadcast** — `SnakeEngine::tick()` accumulator; broadcast
+2. **Tick in the loop + broadcast** — `SnakeGame::tick()` accumulator; broadcast
    `state`; drive it from the headless loop. Verify with a scripted WS client.
 3. **Browser client, one input source** — canvas render + arrow keys. The loop is
    visible.

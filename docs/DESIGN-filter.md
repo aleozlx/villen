@@ -65,7 +65,7 @@ prose:
 | Seam | Lives in | Purity | Chess instance | `filter` instance |
 |---|---|---|---|---|
 | **Pure ruleset** | `engine/` | No I/O, no device, deterministic, CI-tested | `chess::Position` (`apply`/`legalMoves`) | `filter::process(frame, params) -> frame` — a **CPU reference** morphology implementation |
-| **Engine/session adapter** | `host/` | Binds a ruleset to the WS edge + admin; *may* touch device/transport | `GameServer` (today, hardcoded) | `FilterEngine` (CPU reference **or** GPU backend, behind the same interface) |
+| **Engine/session adapter** | `host/` | Binds a ruleset to the WS edge + admin; *may* touch device/transport | `GameServer` (today, hardcoded) | `FilterGame` (CPU reference **or** GPU backend, behind the same interface) |
 
 The pure morphology lives in `engine/filter/` as a **plain-CPU reference** that
 takes a pixel buffer and a pipeline description and returns a pixel buffer — no GL,
@@ -80,44 +80,30 @@ own admin face," not as engine logic. `filter` extends that one notch — GL com
 is "server-side only … for the engine's accelerated face" — and gains a free
 oracle: CI tests the CPU reference; the GPU backend is validated against it.
 
-**The slot itself.** `GameServer` today *is* the chess adapter, hardcoded
-([`session.hpp:71`](../host/src/session.hpp) holds a `chess::Position`). Generalize
-it into an interface at the **adapter** layer (not the pure-ruleset layer):
+**The slot itself.** The host-side adapter is the canonical **`villen::IGame` contract**
+([`DESIGN-game-framework.md`](DESIGN-game-framework.md) §4) — `onJoin`/`onLeave`/
+`onMessage`/`onTick`/`drawAdmin`, driven through a `Room` handle. `GameServer` today *is*
+the chess adapter, hardcoded ([`session.hpp:71`](../host/src/session.hpp) holds a
+`chess::Position`); the extraction makes it `ChessGame : villen::IGame`, and `filter`
+is a new `FilterGame : villen::IGame`. It's a **multi-game host**: both link into the
+one binary and the launcher activates one at a time
+([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md)), so the single-binary/single-loop
+story (DESIGN §2, §5) is untouched.
 
-```cpp
-// host/src/engine.hpp — the generalized slot the host binds the WS edge to.
-namespace villen {
-class IEngine {
- public:
-  virtual ~IEngine() = default;
-  // Lifecycle of a player connection (a "feed" for filter; a seat-claimer for chess).
-  virtual void onConnect(ConnId) {}
-  virtual void onDisconnect(ConnId) {}
-  // Inbound from a connection. Text = JSON control; binary = media payload.
-  virtual void onText(ConnId, std::string_view json) {}
-  virtual void onBinary(ConnId, std::string_view bytes) {}   // NEW transport path, §5
-  // Called once per main-loop iteration (§5). Chess: no-op. Filter: pump the GPU,
-  // flush ready results. Must not block.
-  virtual void tick() {}
-  // Draw this engine's ImGui admin panel (no-op when headless). Chess: session
-  // table + QR. Filter: pipeline controls + per-feed stats (§8).
-  virtual void drawAdmin() {}
-};
-}
-```
+`filter` leans on three properties of that contract:
 
-`main` constructs the chosen engine and routes the `WsServer` callbacks
-([`main.cpp:56`](../host/src/main.cpp)) into it; the loop calls `engine.tick()` each
-iteration and `engine.drawAdmin()` each frame. `GameServer` becomes
-`ChessEngine : IEngine` with no behavioural change (a pure refactor, shippable on
-its own). `FilterEngine : IEngine` is the new instance. Engine selection is a
-runtime flag (`--engine chess|filter`); both link into the one binary, so the
-single-binary, single-process, single-loop story (DESIGN §2, §5) is untouched.
+- **`onMessage` carries opaque bytes** — `filter`'s control JSON *and* its binary JPEG
+  frames both arrive as the game's payload; the one transport addition is that the WS
+  edge must deliver **binary** frames, which it drops today (§5).
+- **`onTick`** is where `filter` pumps the GPU and flushes ready results each loop
+  iteration (§6) — and must not block.
+- **`drawAdmin`** is `filter`'s operator-panel *body* (pipeline controls + per-feed
+  stats, §8), hosted inside the shell's chrome.
 
 **What the slot must *not* assume — and chess accidentally taught it to:**
 
 - **No two-seat, turn-based model.** `filter` has no turns and no White/Black. The
-  seat/turn logic is chess's, and must live *inside* `ChessEngine`, not in the
+  seat/turn logic is chess's, and must live *inside* `ChessGame`, not in the
   shared host. (Today it leaks into `GameServer`; the refactor pushes it down.)
 - **No shared authoritative state broadcast to all.** Chess `broadcast`s one
   position to everyone. `filter` answers **each connection privately** with its own
@@ -390,7 +376,7 @@ be a lie. The honest mapping:
   client only contributes pixels, which it inherently owns (its own camera).
 
 This is the clean validation of §2's claim that the slot must not assume
-seats/turns: `ChessEngine` keeps the seat machinery; `FilterEngine` simply doesn't
+seats/turns: `ChessGame` keeps the seat machinery; `FilterGame` simply doesn't
 implement it, and the host doesn't miss it.
 
 ---
@@ -415,7 +401,7 @@ Deck (DESIGN §8, the `NavEnableGamepad` path already wired in
   toggle to avoid an always-on upload.)
 
 The admin remains *in-process* and privileged-by-construction (DESIGN §9.4): no
-admin socket, it reads/mutates the `FilterEngine` directly on the same thread.
+admin socket, it reads/mutates the `FilterGame` directly on the same thread.
 
 ---
 
@@ -505,8 +491,8 @@ Cheap now, painful to retrofit (mirrors DESIGN §9):
 4. **Per-connection routing is the hinge** for later multi-feed features —
    compositing several cameras, an operator "wall" of all feeds, or per-feed
    pipelines — none of which need a transport change.
-5. **The `IEngine` seam keeps device code out of the host spine.** GL/EGL lives
-   inside `FilterEngine`; `main`, `ws_server`, and the loop stay engine-agnostic,
+5. **The `IGame` seam keeps device code out of the host spine.** GL/EGL lives
+   inside `FilterGame`; `main`, `ws_server`, and the loop stay engine-agnostic,
    so a third engine doesn't touch them.
 
 ---
@@ -541,18 +527,18 @@ Cheap now, painful to retrofit (mirrors DESIGN §9):
    pixel buffer; doctest cases for each operator on tiny fixtures (a single bright
    pixel erodes away; gradient of a step is an edge). No host, no GPU. *Proves the
    math.*
-2. **Generalize the slot.** Extract `IEngine`; refactor `GameServer` →
-   `ChessEngine` with zero behaviour change (chess tests still pass). Add
+2. **Generalize the slot.** Extract `IGame`; refactor `GameServer` →
+   `ChessGame` with zero behaviour change (chess tests still pass). Add
    `onBinary`/`sendBinary` to the WS server with a unit/echo test. *Pure
    plumbing; shippable alone.*
-3. **Media loop, no processing.** `FilterEngine` that decodes the inbound JPEG and
+3. **Media loop, no processing.** `FilterGame` that decodes the inbound JPEG and
    echoes it straight back (identity pipeline). Browser client captures, sends,
    paints. *Proves camera-in → host → camera-out end to end, the riskiest
    transport path, before any GPU.*
 4. **CPU reference in the loop.** Run the actual pipeline on the decoded frame via
    `engine/filter/`. Live morphology — on the CPU — visible in the browser. *Proves
    the engine without GPU risk.*
-5. **GPU backend (EGL + GL compute).** Swap the executor behind `FilterEngine`;
+5. **GPU backend (EGL + GL compute).** Swap the executor behind `FilterGame`;
    assert GPU output matches the CPU reference (§4.3). *The APU milestone.*
 6. **Admin pipeline console.** `drawAdmin()` editor + presets + per-feed stats
    (§8). Operator tunes it live.
@@ -617,7 +603,7 @@ DESIGN §11.1 discipline.
   engines that want it and never *requires* it.
 - **A second binary / separate process for the media engine.** Breaks the
   single-binary thesis (DESIGN §2) and re-introduces IPC. `filter` is just another
-  `IEngine` in the same process and loop.
+  `IGame` in the same process and loop.
 
 ---
 

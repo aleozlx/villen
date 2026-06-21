@@ -68,10 +68,10 @@ the network and the UI on one thread, so there is no shared-state locking
 (DESIGN §5).
 
 > **Where this is heading:** chess is compiled *into* the host today, but the
-> "engine slot" inverts — Villen becomes a **library a single game depends on**.
-> A future game (Snake, a card game, …) carries Villen as a submodule for rooms,
-> seats, and serving, and supplies only the rules + client against a small
-> `IGame` contract; one game type per binary, no IPC. See
+> "engine slot" becomes a reusable **`IGame` contract** — several games (chess, snake,
+> filter, …) implement it as modules in one binary, and a **launcher** runs one at a
+> time on the Deck. Each game supplies only its rules + client; Villen owns rooms,
+> seats, serving, and the admin/launcher face. See
 > [`docs/DESIGN-game-framework.md`](docs/DESIGN-game-framework.md).
 
 The in-process admin UI (session/seat table, join URL + QR), reflecting a player

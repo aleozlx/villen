@@ -1,9 +1,12 @@
-# Villen — the game-framework contract: one game per binary
+# Villen — the game-framework contract: a multi-game host (single-active)
 
 **Status:** design / forward-looking. Refines the "engine slot" of
-[`DESIGN-villen.md`](DESIGN-villen.md) §9.1 into a reusable contract. Not yet
-implemented — chess today is compiled *into* the host; this describes the
-inversion that lets a future game compile the host *into itself*.
+[`DESIGN-villen.md`](DESIGN-villen.md) §9.1 into a reusable `IGame` contract. Not yet
+implemented — chess today is compiled *into* the host. **Revised for a multi-game
+host:** one Villen binary carries several games as `IGame` modules, and a **launcher**
+runs **one at a time** ([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md)); the operator
+picks the game on the Deck. (Earlier drafts said "one game *per binary*"; that is now
+one of two shapes — §1 — with the multi-game host the chosen Deck face.)
 **Scope:** how an unknown future game (Snake, a card game, an action game) reuses
 Villen for rooms + serving without touching Villen's code, and which of today's
 choices are load-bearing versus incidental.
@@ -12,30 +15,35 @@ the framework seam from the current chess-coupled host.
 
 ---
 
-## 1. The inversion: Villen is a library, not a host that contains chess
+## 1. Villen is a library; the games are modules it runs one at a time
 
-Today Villen *is* the binary, and chess is linked into it. The end state of the
-"swappable slot" idea (DESIGN §9.1) flips that dependency:
+Today Villen *is* the binary, and chess is linked into it. The "swappable slot" idea
+(DESIGN §9.1) becomes a reusable contract: each game implements a small `IGame`
+interface (§4); Villen owns rooms, seats, serving, and the admin/launcher face, and
+drives whichever game is active.
 
-> **Villen becomes a submodule that a game depends on.** Each game is its own
-> repository and its own binary; it links Villen for rooms, seats, serving, and
-> the admin face, and supplies the rules + client. A Villen-based binary serves
-> **one game type** — the Snake binary serves Snake, the chess binary serves
-> chess. There is no multi-game host.
+> **One binary carries several games as `IGame` modules; a launcher runs one at a
+> time.** chess, snake, filter, … each implement `IGame`; the host registers their
+> factories and the operator picks one on the Deck
+> ([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md)). It is a **multi-game host, but
+> single-active** — exactly one game runs at any moment.
 
-"One game type per binary" is the decision that keeps everything else simple. In
-particular it **eliminates IPC** (§6): the game is an in-process object, not a
-separate process, because there is no second game to isolate it from.
+"One game **active** at a time" is what keeps everything simple. In particular it keeps
+**no IPC** (§6): the active game is an in-process object, and since only one runs there
+is nothing to isolate it *from*.
 
 ```
-  TODAY                              END STATE (this doc)
-  villen (binary)                    snake (binary)
-  ├─ engine: chess  ◄── in-tree      ├─ villen/  ◄── submodule (rooms+serving+admin)
-  ├─ host: WS + admin + session      ├─ engine: snake rules
-  └─ client: chessboard              ├─ src/game.cpp  : implements villen::IGame
-                                     ├─ client/       : snake renderer + villen-client.js
-                                     └─ main.cpp      : villen::run({...})
+  TODAY                          MULTI-GAME HOST (this doc)
+  villen (binary)                villen (binary)
+  ├─ engine: chess  ◄ in-tree    ├─ villen lib : WS + admin/launcher + rooms + loop
+  ├─ host: WS + admin + session  ├─ games/     : chess, snake, filter, … each : IGame
+  └─ client: chessboard          ├─ client/<game>/ : each game's renderer + villen-client.js
+                                 └─ launcher   : operator picks a game; runs ONE at a time
 ```
+
+*(A game may alternatively live in its own repo and link Villen as a **submodule** —
+its own single-game binary, same `IGame` contract, just without the launcher. The
+multi-game host is the chosen Deck face.)*
 
 ---
 
@@ -51,13 +59,16 @@ both ends of:
    writes its renderer on top.
 3. **The game's own wire payload** — opaque to Villen, identical on both ends.
 
-The **in-process admin console** (today's Dear ImGui UI, DESIGN §8) is **not** on
-this list. It is an *operator* face — create/observe rooms, manage seats, show the
-join URL + QR, surface diagnostics — and a game author never implements or even
-sees it. The litmus test for a correctly drawn boundary: **the admin console can
-render a room without knowing which game it is.** It reads only Villen's generic
-membership state plus an optional game-supplied status string (§4); it never
-touches the game's protocol.
+The **in-process admin console** (today's Dear ImGui UI, DESIGN §8) is an *operator*
+face — the launcher, create/observe rooms, manage seats, the join URL + QR,
+diagnostics. Most of it is **game-agnostic**: the litmus test is that the shell renders
+a room's membership and the launcher list **without knowing which game it is**, reading
+only Villen's generic membership state plus an optional game-supplied `statusLine()`
+(§4). **But a game may also contribute its own operator panel** via the optional
+`drawAdmin()` (§4) — `filter`'s pipeline editor, `chat`'s model selector, `jam`'s tempo
+— which the shell hosts *inside its own chrome* while that game is active. The boundary:
+the shell owns the chrome + launcher + roster; the game owns only its panel body and
+draws no chrome ([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md) §8).
 
 (The README's "at a glance" diagram draws the console as a peer box to the engine
 and gateway. Under this framing it belongs *inside* the Villen library as an
@@ -108,7 +119,8 @@ struct IGame {
   virtual void onLeave  (Room&, ConnId, SeatId) = 0;
   virtual void onMessage(Room&, ConnId, SeatId, std::string_view) = 0;  // the game's protocol
   virtual void onTick   (Room&, uint64_t now) {}   // real-time games only; default no-op
-  virtual const char* statusLine() { return ""; }  // for the admin console only; optional
+  virtual const char* statusLine() { return ""; }  // generic admin roster line; optional
+  virtual void drawAdmin() {}                       // optional operator panel body (admin-shell §8)
   virtual void reset() {}                           // admin "new game"; optional
 };
 
@@ -116,14 +128,17 @@ struct IGame {
 struct IGameFactory {
   virtual ~IGameFactory() = default;
   virtual std::unique_ptr<IGame> create() = 0;
+  virtual const char* name()      = 0;   // shown in the launcher
+  virtual const char* clientDir() = 0;   // this game's client assets to serve
 };
 
+// The host registers several games; the launcher activates ONE at a time.
 struct Config {
-  std::string staticRoot = "client";
-  std::unique_ptr<IGameFactory> factory;
+  std::vector<std::unique_ptr<IGameFactory>> games;   // the launcher's menu
+  std::string startGame = "";   // optional: boot straight into one (kiosk / --engine)
 };
 
-void run(Config);   // e.g. run({ .staticRoot = "client", .factory = makeSnake() });
+void run(Config);   // boots the launcher; operator picks a game (DESIGN-admin-shell)
 
 }  // namespace villen
 ```
@@ -158,8 +173,9 @@ don't implement `onTick`.
 Today there is one hardcoded session, `"default"`. Whether one Deck hosts one room
 or several rooms of the same game (three chess matches at a gathering) is settled
 by making `IGame` a **per-room instance from a factory**: single-room is "max rooms
-= 1," same shape. Still one process, still no IPC — multiple rooms are just
-multiple `IGame` instances in the one binary.
+= 1," same shape. Still one process, still no IPC — multiple rooms are just multiple
+`IGame` instances in the one binary. (Different *games* are different factories the
+launcher picks among — the multi-game host, §1 — still one active at a time.)
 
 ### 5.3 WebSocket ⊂ transport-agnostic (and why unreliable is safe here)
 
@@ -193,9 +209,10 @@ for simplicity.
 ## 6. No IPC, single process (the engine-isolation question, settled)
 
 A recurring question is whether the engine should run as a separate, crash-isolated
-process with shared memory. Under "one game type per binary," the answer is **no**,
-for the cleanest possible reason: there is only ever one game in the process, so
-there is nothing to isolate it *from*. Process separation would reintroduce exactly
+process with shared memory. Under **one game active at a time**, the answer is **no**,
+for the cleanest possible reason: only ever one game runs in the process, so there is
+nothing to isolate it *from* (switching games tears one down before starting the next,
+[`DESIGN-admin-shell.md`](DESIGN-admin-shell.md) §4). Process separation would reintroduce exactly
 the IPC/serialization/lifecycle cost that the single-process, single-thread,
 no-locks thesis (DESIGN §5) was built to avoid.
 
@@ -259,6 +276,10 @@ submodule. Snake is real-time, so `SnakeGame` implements `onTick` and leaves the
   (single binary, chess in-tree, WebSocket, one session). This doc refines its
   §9.1 "engine slot" into a contract and states which of its choices are
   incidental.
+- [`DESIGN-admin-shell.md`](DESIGN-admin-shell.md) is the operator shell that hosts
+  this contract: the launcher that picks a game, the per-game `drawAdmin()` panels, and
+  the one-game-active lifecycle. [`DESIGN-engine-roadmap.md`](DESIGN-engine-roadmap.md)
+  indexes the games being designed against it (filter/chat/snake/canvas/jam).
 - [`DESIGN-spectator-and-agent-api.md`](DESIGN-spectator-and-agent-api.md) layers
   alternative *seat drivers* (CLI, server-side agents) on the same player edge;
   orthogonal to this doc — those drivers sit on the envelope, below any single
