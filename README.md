@@ -101,6 +101,25 @@ view) is designed in [`docs/DESIGN-admin-shell.md`](docs/DESIGN-admin-shell.md).
 forward-looking note on whether the appliance could patch its own minor bugs is in
 [`docs/DESIGN-self-hotfix.md`](docs/DESIGN-self-hotfix.md).
 
+### 🎮⚡ `chat` — measured on the actual Steam Deck APU
+
+The `chat` engine is past paper: its local-LLM path is up on the Deck's **Van Gogh
+APU via RADV Vulkan** (never software-GL `llvmpipe`), and a Step 7 throughput spike
+([`spike/chat-bench/`](spike/chat-bench/)) quantifies it across all three models
+(measured 2026-06-21, `llama-server` b9744, 7–8B Q4_K_M):
+
+- 🚀 **~14–15 tok/s** single-stream decode — Qwen2.5-7B **14.4**, Llama-3.1-8B **13.7**,
+  Mistral-7B **14.8** — at **sub-second TTFT** (~0.5–0.85 s). Reads faster than you do.
+- 👥 **Batching scales (§8):** 4 concurrent clients reach **~27–30 tok/s aggregate**
+  while each stream degrades gracefully (≈14 → 11 → 7.5 tok/s from 1 → 2 → 4 slots).
+- 🧠 **Fits with room to spare (§5):** one model resident leaves **~5.7–6.9 GB** of the
+  16 GB unified memory free, with the device awake and under load.
+- 🐌➡️🏎️ **Vulkan ≈ 2.9× CPU:** 14.4 vs **4.96 tok/s** (`-ngl 0`) on Qwen — the APU
+  offload earns its keep.
+
+Full table, method, and the CPU/concurrency breakdown:
+[`spike/chat-bench/README.md`](spike/chat-bench/README.md).
+
 ## Repository layout
 
 | Path | What |
