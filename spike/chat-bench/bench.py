@@ -156,28 +156,47 @@ class Server:
 
     def backend(self):
         """Read the captured log and classify the compute backend. Returns
-        (label, detail-lines). label in {vulkan, cpu, llvmpipe, unknown}."""
+        (label, detail-lines). label in {vulkan, cpu, llvmpipe, unknown}.
+
+        The Deck's llama.cpp build (b9744) enumerates devices as
+        `- Vulkan0 : AMD Custom GPU 0405 (RADV VANGOGH) ...` and, at default
+        verbosity, does NOT print the older `ggml_vulkan:` / `offloaded N/M
+        layers to GPU` banners. So we key off the device-enumeration line plus
+        the requested -ngl: a real RADV/Vulkan device line at -ngl>0 = `vulkan`;
+        `llvmpipe` anywhere = the software-GL failure (§4); -ngl 0 = `cpu` (the
+        Vulkan device may still be *enumerated* at -ngl 0, but nothing offloads)."""
         try:
             with open(self.logpath, "r", errors="replace") as f:
                 text = f.read()
         except OSError:
             return "unknown", []
-        lines = text.splitlines()
         hits = []
-        label = "unknown"
-        for ln in lines:
+        saw_llvmpipe = False
+        saw_vulkan_dev = False
+        for ln in text.splitlines():
             low = ln.lower()
             if "llvmpipe" in low:
-                label = "llvmpipe"  # software GL — the failure mode §4 warns about
+                saw_llvmpipe = True
                 hits.append(ln.strip())
-            elif "ggml_vulkan" in low or ("vulkan" in low and "device" in low):
-                if label != "llvmpipe":
-                    label = "vulkan"
+            elif "vulkan" in low:
+                # Any Vulkan device/backend line — `ggml_vulkan: ...` or the b9744
+                # device enumeration `- Vulkan0 : <vendor> ...`. Vendor-agnostic on
+                # purpose: AMD prints `(RADV VANGOGH)`, but an NVIDIA/Intel GPU on a
+                # PC self-test won't, and we still want `vulkan`. `llvmpipe`
+                # (software GL) is matched above with higher precedence, so reaching
+                # here means a real hardware Vulkan device.
+                saw_vulkan_dev = True
                 hits.append(ln.strip())
             elif "offloaded" in low and "layer" in low:
                 hits.append(ln.strip())
-        if label == "unknown" and self.ngl == 0:
-            label = "cpu"  # -ngl 0 with no Vulkan banner = the intended CPU path
+        if saw_llvmpipe:
+            label = "llvmpipe"  # software GL — the failure mode §4 warns about
+        elif self.ngl > 0 and saw_vulkan_dev:
+            label = "vulkan"
+        elif self.ngl == 0:
+            label = "cpu"  # -ngl 0 = the intended CPU path (device may still enumerate)
+        else:
+            label = "unknown"
         return label, hits[:8]
 
     def stop(self):
