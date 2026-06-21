@@ -66,13 +66,13 @@ void LlamaProcess::restart(std::uint64_t nowMs) {
     // flag would dangle and mask the *next* genuine crash as "intentional".
     if (pid_ > 0) {
         ::kill(pid_, SIGTERM);
-        restarting_ = true;        // so reapIfExited doesn't log this as a crash
+        restarting_ = true;  // so reapIfExited doesn't log this as a crash
     } else {
-        nextSpawnMs_ = nowMs;      // already down — spawn the new model promptly
+        nextSpawnMs_ = nowMs;  // already down — spawn the new model promptly
     }
     paused_ = false;
     ready_ = false;
-    switchStartMs_ = nowMs;        // start the unload→reload latency timer
+    switchStartMs_ = nowMs;  // start the unload→reload latency timer
     lastError_ = "reloading";
 }
 
@@ -80,28 +80,42 @@ void LlamaProcess::stop(std::uint64_t nowMs) {
     (void)nowMs;
     if (pid_ > 0) {
         ::kill(pid_, SIGTERM);
-        restarting_ = true;        // an intentional exit, not a crash
+        restarting_ = true;  // an intentional exit, not a crash
     }
     paused_ = true;
     ready_ = false;
-    switchStartMs_ = 0;            // not reloading — staying down
+    switchStartMs_ = 0;  // not reloading — staying down
     lastError_ = "unloaded";
 }
 
 void LlamaProcess::spawn(std::uint64_t nowMs) {
     // Build argv: llama-server -m <model> --host H --port P -ngl N --parallel N.
     std::vector<std::string> args = {cfg_.bin};
-    if (!cfg_.model.empty()) { args.push_back("-m"); args.push_back(cfg_.model); }
-    args.push_back("--host");      args.push_back(cfg_.host);
-    args.push_back("--port");      args.push_back(std::to_string(cfg_.port));
-    args.push_back("-ngl");        args.push_back(std::to_string(cfg_.ngl));
-    args.push_back("--parallel");  args.push_back(std::to_string(cfg_.parallel));
-    if (cfg_.ctxSize > 0) { args.push_back("-c"); args.push_back(std::to_string(cfg_.ctxSize)); }
-    for (const auto& a : cfg_.extraArgs) args.push_back(a);
+    if (!cfg_.model.empty()) {
+        args.push_back("-m");
+        args.push_back(cfg_.model);
+    }
+    args.push_back("--host");
+    args.push_back(cfg_.host);
+    args.push_back("--port");
+    args.push_back(std::to_string(cfg_.port));
+    args.push_back("-ngl");
+    args.push_back(std::to_string(cfg_.ngl));
+    args.push_back("--parallel");
+    args.push_back(std::to_string(cfg_.parallel));
+    if (cfg_.ctxSize > 0) {
+        args.push_back("-c");
+        args.push_back(std::to_string(cfg_.ctxSize));
+    }
+    for (const auto& a : cfg_.extraArgs) {
+        args.push_back(a);
+    }
 
     std::vector<char*> argv;
     argv.reserve(args.size() + 1);
-    for (auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+    for (auto& a : args) {
+        argv.push_back(const_cast<char*>(a.c_str()));
+    }
     argv.push_back(nullptr);
 
     pid_t pid = ::fork();
@@ -134,10 +148,14 @@ void LlamaProcess::spawn(std::uint64_t nowMs) {
 }
 
 void LlamaProcess::reapIfExited(std::uint64_t nowMs) {
-    if (pid_ <= 0) return;
+    if (pid_ <= 0) {
+        return;
+    }
     int status = 0;
     pid_t r = ::waitpid(pid_, &status, WNOHANG);
-    if (r == 0) return;            // still running
+    if (r == 0) {
+        return;  // still running
+    }
     if (r < 0) {
         // waitpid was interrupted (EINTR) or otherwise failed: `status` is only
         // valid for r>0, so do NOT read it or mark the child dead — it's still
@@ -201,7 +219,9 @@ bool LlamaProcess::probeHealth() {
     // the model is loading; once ready we stop probing. A fully-async probe is a
     // later refinement; this keeps the loop responsive without a state machine.
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) return false;
+    if (fd < 0) {
+        return false;
+    }
     int flags = ::fcntl(fd, F_GETFL, 0);
     ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
@@ -211,24 +231,36 @@ bool LlamaProcess::probeHealth() {
     ::inet_pton(AF_INET, cfg_.host.c_str(), &addr.sin_addr);
 
     bool ok = false;
-    auto cleanup = [&]() { ::close(fd); return ok; };
+    auto cleanup = [&]() {
+        ::close(fd);
+        return ok;
+    };
 
     if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 &&
-        errno != EINPROGRESS)
+        errno != EINPROGRESS) {
         return cleanup();
+    }
 
     pollfd pf{fd, POLLOUT, 0};
-    if (::poll(&pf, 1, 30) <= 0 || !(pf.revents & POLLOUT)) return cleanup();
+    if (::poll(&pf, 1, 30) <= 0 || !(pf.revents & POLLOUT)) {
+        return cleanup();
+    }
     int err = 0;
     socklen_t len = sizeof(err);
     ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
-    if (err != 0) return cleanup();
+    if (err != 0) {
+        return cleanup();
+    }
 
     std::string req = "GET /health HTTP/1.0\r\nHost: " + cfg_.host + "\r\n\r\n";
-    if (::send(fd, req.data(), req.size(), MSG_NOSIGNAL) < 0) return cleanup();
+    if (::send(fd, req.data(), req.size(), MSG_NOSIGNAL) < 0) {
+        return cleanup();
+    }
 
     pf.events = POLLIN;
-    if (::poll(&pf, 1, 30) <= 0 || !(pf.revents & POLLIN)) return cleanup();
+    if (::poll(&pf, 1, 30) <= 0 || !(pf.revents & POLLIN)) {
+        return cleanup();
+    }
     char buf[128];
     ssize_t n = ::recv(fd, buf, sizeof(buf) - 1, 0);
     if (n > 0) {

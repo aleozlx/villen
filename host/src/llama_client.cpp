@@ -17,17 +17,21 @@ using json = nlohmann::json;
 
 namespace villen::chat {
 
-LlamaClient::LlamaClient(std::string host, int port)
-    : host_(std::move(host)), port_(port) {}
+LlamaClient::LlamaClient(std::string host, int port) : host_(std::move(host)), port_(port) {}
 
 LlamaClient::~LlamaClient() {
-    for (auto& r : reqs_)
-        if (r.fd >= 0) ::close(r.fd);
+    for (auto& r : reqs_) {
+        if (r.fd >= 0) {
+            ::close(r.fd);
+        }
+    }
 }
 
 LlamaClient::ReqId LlamaClient::start(const std::string& body, StreamSink sink) {
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    if (fd < 0) return 0;
+    if (fd < 0) {
+        return 0;
+    }
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     int one = 1;
@@ -71,7 +75,9 @@ LlamaClient::ReqId LlamaClient::start(const std::string& body, StreamSink sink) 
 void LlamaClient::cancel(ReqId id) {
     for (auto it = reqs_.begin(); it != reqs_.end(); ++it) {
         if (it->id == id) {
-            if (it->fd >= 0) ::close(it->fd);
+            if (it->fd >= 0) {
+                ::close(it->fd);
+            }
             reqs_.erase(it);
             return;
         }
@@ -79,16 +85,22 @@ void LlamaClient::cancel(ReqId id) {
 }
 
 void LlamaClient::pump() {
-    if (reqs_.empty()) return;
+    if (reqs_.empty()) {
+        return;
+    }
 
     std::vector<pollfd> pfds;
     pfds.reserve(reqs_.size());
     for (auto& r : reqs_) {
         short ev = POLLIN;
-        if (!r.connected || !r.outbuf.empty()) ev |= POLLOUT;
+        if (!r.connected || !r.outbuf.empty()) {
+            ev |= POLLOUT;
+        }
         pfds.push_back({r.fd, ev, 0});
     }
-    if (::poll(pfds.data(), pfds.size(), 0) < 0) return;  // EINTR etc.: try later
+    if (::poll(pfds.data(), pfds.size(), 0) < 0) {
+        return;  // EINTR etc.: try later
+    }
 
     for (std::size_t i = 0; i < reqs_.size(); ++i) {
         Req& r = reqs_[i];
@@ -107,16 +119,22 @@ void LlamaClient::pump() {
             }
             r.connected = true;
         }
-        if (r.connected && !r.outbuf.empty() && (re & POLLOUT)) serviceWrite(r);
+        if (r.connected && !r.outbuf.empty() && (re & POLLOUT)) {
+            serviceWrite(r);
+        }
         // serviceWrite may have failed the request this tick; don't then read a
         // socket we've already given up on.
-        if (!r.finished && r.connected && (re & (POLLIN | POLLHUP))) serviceRead(r);
+        if (!r.finished && r.connected && (re & (POLLIN | POLLHUP))) {
+            serviceRead(r);
+        }
     }
 
     // Reap finished/failed requests.
     for (auto it = reqs_.begin(); it != reqs_.end();) {
         if (it->finished) {
-            if (it->fd >= 0) ::close(it->fd);
+            if (it->fd >= 0) {
+                ::close(it->fd);
+            }
             it = reqs_.erase(it);
         } else {
             ++it;
@@ -125,8 +143,11 @@ void LlamaClient::pump() {
 }
 
 void LlamaClient::collectFds(std::vector<int>& out) const {
-    for (const Req& r : reqs_)
-        if (r.fd >= 0) out.push_back(r.fd);
+    for (const Req& r : reqs_) {
+        if (r.fd >= 0) {
+            out.push_back(r.fd);
+        }
+    }
 }
 
 void LlamaClient::serviceWrite(Req& r) {
@@ -150,16 +171,23 @@ void LlamaClient::serviceRead(Req& r) {
     for (;;) {
         ssize_t n = ::recv(r.fd, buf, sizeof(buf), 0);
         if (n > 0) {
-            for (const auto& item : r.parser.feed(std::string_view(buf, static_cast<std::size_t>(n)))) {
+            for (const auto& item :
+                 r.parser.feed(std::string_view(buf, static_cast<std::size_t>(n)))) {
                 handleItem(r, item);
-                if (r.finished) return;
+                if (r.finished) {
+                    return;
+                }
             }
         } else if (n == 0) {  // EOF: server closed the stream
             for (const auto& item : r.parser.end()) {
                 handleItem(r, item);
-                if (r.finished) return;
+                if (r.finished) {
+                    return;
+                }
             }
-            if (!r.finished) fail(r, "backend_down");  // closed before a clean end
+            if (!r.finished) {
+                fail(r, "backend_down");  // closed before a clean end
+            }
             return;
         } else if (n < 0 && errno == EINTR) {
             continue;  // interrupted by a signal; retry the read, don't fail
@@ -178,33 +206,44 @@ void LlamaClient::handleItem(Req& r, const SseParser::Item& it) {
             break;  // a non-200 arrives as a following Error item
         case SseParser::Kind::Data: {
             json j = json::parse(it.data, nullptr, /*allow_exceptions=*/false);
-            if (j.is_discarded() || !j.is_object()) return;
+            if (j.is_discarded() || !j.is_object()) {
+                return;
+            }
             auto ch = j.find("choices");
-            if (ch == j.end() || !ch->is_array() || ch->empty()) return;
+            if (ch == j.end() || !ch->is_array() || ch->empty()) {
+                return;
+            }
             const json& c0 = (*ch)[0];
             // choices[0] from an untrusted backend may not be an object (null,
             // string, …) — guard before find(), the same type-check-before-access
             // discipline as ChatEngine::strField (defense in depth).
-            if (!c0.is_object()) return;
+            if (!c0.is_object()) {
+                return;
+            }
             auto d = c0.find("delta");
             if (d != c0.end() && d->is_object()) {
                 auto cont = d->find("content");
                 if (cont != d->end() && cont->is_string()) {
                     std::string s = cont->get<std::string>();
                     if (!s.empty()) {
-                        if (r.sink.onDelta) r.sink.onDelta(s);
+                        if (r.sink.onDelta) {
+                            r.sink.onDelta(s);
+                        }
                         ++r.tokens;  // ~one token per non-empty delta
                     }
                 }
             }
             auto fr = c0.find("finish_reason");
-            if (fr != c0.end() && fr->is_string())
+            if (fr != c0.end() && fr->is_string()) {
                 r.stopReason = (fr->get<std::string>() == "length") ? "length" : "eos";
+            }
             break;
         }
         case SseParser::Kind::Done:
             if (!r.finished) {
-                if (r.sink.onDone) r.sink.onDone(r.stopReason, r.tokens);
+                if (r.sink.onDone) {
+                    r.sink.onDone(r.stopReason, r.tokens);
+                }
                 r.finished = true;
             }
             break;
@@ -216,7 +255,9 @@ void LlamaClient::handleItem(Req& r, const SseParser::Item& it) {
 
 void LlamaClient::fail(Req& r, const std::string& reason) {
     if (!r.finished) {
-        if (r.sink.onError) r.sink.onError(reason);
+        if (r.sink.onError) {
+            r.sink.onError(reason);
+        }
         r.finished = true;
     }
 }

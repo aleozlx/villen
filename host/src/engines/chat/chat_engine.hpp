@@ -41,13 +41,13 @@ namespace villen {
 //   - none                → Down (chatSend -> backend_down).
 struct ChatBackendConfig {
     std::string llamaHost = "127.0.0.1";
-    int llamaPort = 0;        // connect/spawn port (spawn defaults to 8080)
-    bool stub = false;        // --chat-stub → in-host echo generator
-    std::string llamaBin;     // --llama-bin → spawn this llama-server
-    std::string model;        // -m model for the spawned server (§11)
-    std::string modelsDir;    // --models-dir → scan for switchable GGUFs (§5)
-    int ngl = 99;             // -ngl GPU layers (§6)
-    int parallel = 2;         // --parallel slots (§8)
+    int llamaPort = 0;      // connect/spawn port (spawn defaults to 8080)
+    bool stub = false;      // --chat-stub → in-host echo generator
+    std::string llamaBin;   // --llama-bin → spawn this llama-server
+    std::string model;      // -m model for the spawned server (§11)
+    std::string modelsDir;  // --models-dir → scan for switchable GGUFs (§5)
+    int ngl = 99;           // -ngl GPU layers (§6)
+    int parallel = 2;       // --parallel slots (§8)
     // Operator-supplied model id → GGUF path map (§11; weights are not shipped),
     // from repeated --model-path id=path. The admin console's Load/Switch (§9)
     // resolves the selected model id to a path here and restarts llama-server
@@ -65,11 +65,11 @@ class ChatEngine : public IEngine {
     void onJoin(Room&, ConnId, SeatId) override;      // push chatConfig
     void onLeave(Room&, ConnId, SeatId) override;     // drop the conn's state (§11)
     void onMessage(Room&, ConnId, SeatId, std::string_view) override;
-    void onTick(Room&, std::uint64_t nowMs) override; // pump SSE + drive the stub
-    void collectPollFds(std::vector<int>&) override;  // active llama sockets (§3.A)
+    void onTick(Room&, std::uint64_t nowMs) override;  // pump SSE + drive the stub
+    void collectPollFds(std::vector<int>&) override;   // active llama sockets (§3.A)
     std::string statusLine() const override;
     void drawAdmin() override;
-    void reset() override;                             // stop all + clear
+    void reset() override;  // stop all + clear
 
     // Headless operator control (§5): advance to the next model with a configured
     // GGUF and load it via the normal switch path. The Game-Mode operator uses the
@@ -110,9 +110,7 @@ class ChatEngine : public IEngine {
     std::unique_ptr<chat::LlamaProcess> process_;  // set when we spawn llama-server
 
     // Per-connection, per-convId conversation state — private, in RAM only (§11).
-    std::unordered_map<ConnId,
-                       std::unordered_map<std::string, chat::Conversation>>
-        convs_;
+    std::unordered_map<ConnId, std::unordered_map<std::string, chat::Conversation>> convs_;
 
     // One in-flight generation per (conn, convId): turn-of-generation (§7). In
     // Stub mode `tokens` is the pre-split echo reply, emitted on the onTick clock;
@@ -121,9 +119,9 @@ class ChatEngine : public IEngine {
         ConnId conn = 0;
         std::string convId;
         int msgId = 0;
-        std::string acc;             // reply so far; appended to the conv on done
-        std::uint64_t startMs = 0;   // first-token time, for tok/s
-        int emitted = 0;             // deltas streamed so far (live admin tok/s, §9)
+        std::string acc;            // reply so far; appended to the conv on done
+        std::uint64_t startMs = 0;  // first-token time, for tok/s
+        int emitted = 0;            // deltas streamed so far (live admin tok/s, §9)
         bool stub = false;
         // Stub timer:
         std::vector<std::string> tokens;
@@ -173,9 +171,7 @@ class ChatEngine : public IEngine {
 class ChatFactory : public IEngineFactory {
  public:
     explicit ChatFactory(ChatBackendConfig cfg = {}) : cfg_(std::move(cfg)) {}
-    std::unique_ptr<IEngine> create() override {
-        return std::make_unique<ChatEngine>(cfg_);
-    }
+    std::unique_ptr<IEngine> create() override { return std::make_unique<ChatEngine>(cfg_); }
     const char* name() const override { return "chat"; }
     // The chat browser view lives in client/chat/ (served at /chat/). Per-engine
     // client routing isn't auto-wired yet, so this is the forward-compatible

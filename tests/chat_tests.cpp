@@ -82,8 +82,8 @@ TEST_CASE("token estimate is ceil(chars / kCharsPerToken)") {
 
 TEST_CASE("estimatedTokens sums content plus per-message overhead") {
     Conversation c;
-    c.setSystem("abcd");   // 1 token + overhead
-    c.addUser("abcd");     // 1 token + overhead
+    c.setSystem("abcd");  // 1 token + overhead
+    c.addUser("abcd");    // 1 token + overhead
     const auto k = Conversation::kPerMessageOverhead;
     CHECK(c.estimatedTokens() == (1 + k) + (1 + k));
 }
@@ -98,14 +98,14 @@ TEST_CASE("capToTokens is a no-op within budget") {
 TEST_CASE("capToTokens drops oldest turns, keeps the most recent and the system") {
     Conversation c;
     c.setSystem("sys");
-    c.addUser("11111111");       // 8 chars -> 2 tokens (+overhead)
+    c.addUser("11111111");  // 8 chars -> 2 tokens (+overhead)
     c.addAssistant("22222222");
-    c.addUser("33333333");       // the live query — must survive
+    c.addUser("33333333");  // the live query — must survive
 
     const auto before = c.estimatedTokens();
     std::size_t dropped = c.capToTokens(before / 2);
     CHECK(dropped >= 1);
-    CHECK(c.hasSystem());                          // system is preserved
+    CHECK(c.hasSystem());  // system is preserved
     REQUIRE(c.size() >= 1);
     CHECK(c.turns().back() == Turn{Role::User, "33333333"});  // newest kept
     CHECK(c.estimatedTokens() <= before);
@@ -145,8 +145,8 @@ TEST_CASE("known models map to the right family") {
 }
 
 TEST_CASE("stop tokens per family (§4)") {
-    CHECK(stopTokens(ModelFamily::Llama3)  == std::vector<std::string>{"<|eot_id|>"});
-    CHECK(stopTokens(ModelFamily::ChatML)  == std::vector<std::string>{"<|im_end|>"});
+    CHECK(stopTokens(ModelFamily::Llama3) == std::vector<std::string>{"<|eot_id|>"});
+    CHECK(stopTokens(ModelFamily::ChatML) == std::vector<std::string>{"<|im_end|>"});
     CHECK(stopTokens(ModelFamily::Mistral) == std::vector<std::string>{"</s>"});
 }
 
@@ -290,18 +290,20 @@ std::vector<SseParser::Item> drain(const std::string& wire, bool byteWise) {
 
 std::vector<std::string> dataPayloads(const std::vector<SseParser::Item>& items) {
     std::vector<std::string> out;
-    for (const auto& it : items)
-        if (it.kind == SseParser::Kind::Data) out.push_back(it.data);
+    for (const auto& it : items) {
+        if (it.kind == SseParser::Kind::Data) {
+            out.push_back(it.data);
+        }
+    }
     return out;
 }
 
 }  // namespace
 
 TEST_CASE("SSE: chunked llama-server stream -> headers, data events, done") {
-    const std::string wire = std::string(kHdr) +
-                             chunk("data: {\"d\":\"He\"}\n\n") +
-                             chunk("data: {\"d\":\"llo\"}\n\n") +
-                             chunk("data: [DONE]\n\n") + kLastChunk;
+    const std::string wire = std::string(kHdr) + chunk("data: {\"d\":\"He\"}\n\n") +
+                             chunk("data: {\"d\":\"llo\"}\n\n") + chunk("data: [DONE]\n\n") +
+                             kLastChunk;
 
     for (bool byteWise : {false, true}) {  // same result whole or byte-by-byte
         auto items = drain(wire, byteWise);
@@ -310,19 +312,20 @@ TEST_CASE("SSE: chunked llama-server stream -> headers, data events, done") {
         CHECK(items.front().status == 200);
         auto data = dataPayloads(items);
         REQUIRE(data.size() == 2);
-        CHECK(data[0] == "{\"d\":\"He\"}");   // leading space after "data:" stripped
+        CHECK(data[0] == "{\"d\":\"He\"}");  // leading space after "data:" stripped
         CHECK(data[1] == "{\"d\":\"llo\"}");
         CHECK(items.back().kind == SseParser::Kind::Done);
         // Exactly one terminal event (the [DONE], not a duplicate from the 0-chunk).
         int dones = 0;
-        for (const auto& it : items) dones += (it.kind == SseParser::Kind::Done);
+        for (const auto& it : items) {
+            dones += (it.kind == SseParser::Kind::Done);
+        }
         CHECK(dones == 1);
     }
 }
 
 TEST_CASE("SSE: stream without [DONE] is ended by the terminating 0-chunk") {
-    const std::string wire =
-        std::string(kHdr) + chunk("data: {\"d\":\"x\"}\n\n") + kLastChunk;
+    const std::string wire = std::string(kHdr) + chunk("data: {\"d\":\"x\"}\n\n") + kLastChunk;
     auto items = drain(wire, false);
     auto data = dataPayloads(items);
     REQUIRE(data.size() == 1);
@@ -354,9 +357,8 @@ TEST_CASE("SSE: non-200 status yields an error event") {
 
 TEST_CASE("SSE: a data line split across chunk boundaries reassembles") {
     // The "data: {...}" line is split mid-payload across two chunks.
-    const std::string wire = std::string(kHdr) + chunk("data: {\"d\":\"par") +
-                             chunk("t\"}\n\n") + chunk("data: [DONE]\n\n") +
-                             kLastChunk;
+    const std::string wire = std::string(kHdr) + chunk("data: {\"d\":\"par") + chunk("t\"}\n\n") +
+                             chunk("data: [DONE]\n\n") + kLastChunk;
     auto items = drain(wire, false);
     auto data = dataPayloads(items);
     REQUIRE(data.size() == 1);
@@ -374,6 +376,8 @@ TEST_CASE("SSE: an overflowing chunk size cannot bypass the bounds check") {
     CHECK(items.front().kind == SseParser::Kind::Headers);
     CHECK(dataPayloads(items).empty());  // the impossible chunk is never satisfied
     int dones = 0;
-    for (const auto& it : items) dones += (it.kind == SseParser::Kind::Done);
+    for (const auto& it : items) {
+        dones += (it.kind == SseParser::Kind::Done);
+    }
     CHECK(dones == 0);
 }

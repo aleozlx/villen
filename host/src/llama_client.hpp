@@ -69,7 +69,7 @@ class LlamaClient {
         ReqId id = 0;
         int fd = -1;
         bool connected = false;
-        std::string outbuf;     // request bytes still to send
+        std::string outbuf;  // request bytes still to send
         SseParser parser;
         StreamSink sink;
         int tokens = 0;

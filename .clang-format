@@ -1,0 +1,30 @@
+# Villen C++ style — see CLAUDE.md and docs/CODE-REVIEW.md for the rules this
+# encodes. The point of checking it in is the project brace rule: every
+# if/else/for/while/do body is braced, on its own line, never packed onto the
+# condition line. InsertBraces adds the braces; the AllowShort* = Never/false
+# settings force the body onto its own line. Run:  clang-format -i <files>
+#
+# clang-format >= 16 required (InsertBraces). The pinned dev binary is the
+# `clang-format` PyPI wheel — see docs/CODE-REVIEW.md.
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++17
+IndentWidth: 4
+ColumnLimit: 100
+AccessModifierOffset: -3
+DerivePointerAlignment: false
+PointerAlignment: Left
+# Leave include order to the author (groups are intentional: own header, then C
+# system, then C++ stdlib); don't reshuffle existing files.
+SortIncludes: false
+
+# --- the brace rule (CLAUDE.md) ---
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+# Keep one-line inline accessors — `bool ready() const { return ready_; }` is a
+# function body, not a control-flow body, so the brace rule does not apply.
+AllowShortFunctionsOnASingleLine: Inline

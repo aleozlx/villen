@@ -111,6 +111,22 @@ These are load-bearing. A change that breaks one is blocking, however small.
   This is the rule for all new and modified code. Existing unbraced statements
   predate it; update them when you are already touching that code.
 
+  The checked-in [`.clang-format`](../.clang-format) enforces this mechanically
+  (`InsertBraces` + `AllowShort*: Never`), alongside the rest of the house style
+  (4-space indent, 100-col, attach braces, left-aligned pointers). Format files
+  you add or substantially rewrite, but **do not bulk-reformat a pre-existing
+  file** — that buries your change under unrelated churn and trips the rule above.
+  The pinned dev binary is the [`clang-format`](https://pypi.org/project/clang-format/)
+  PyPI wheel (needs ≥ 16 for `InsertBraces`); install in a venv and run:
+
+  ```bash
+  pip install clang-format            # in a venv (PEP 668)
+  clang-format -i path/to/new_file.cpp
+  clang-format --dry-run -Werror path/to/file.cpp   # CI-style check, no edits
+  # only the lines you touched in an otherwise-legacy file:
+  clang-format -i --lines=START:END path/to/legacy.cpp
+  ```
+
 - **C++17, "C with destructors."** Flat, allocation-visible, RAII for handles.
   Prefer plain structs and free functions over class hierarchies; reach for an
   abstraction only once a second concrete user exists.

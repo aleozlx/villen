@@ -84,7 +84,10 @@ need the cross-build-and-copy dance above.
 - **Brace every `if`/`else`/`for`/`while`/`do` body, even a single statement** — no
   unbraced guard clauses or early returns (`else if` chains stay flat: write
   `else if (...) { }`, not an extra outer brace layer). Guards against the
-  `goto fail;`-class bug and keeps later diffs safe.
+  `goto fail;`-class bug and keeps later diffs safe. The checked-in `.clang-format`
+  enforces this (and the rest of the house style); run `clang-format -i` on files
+  you add, but don't bulk-reformat pre-existing files. See
+  [`docs/CODE-REVIEW.md`](docs/CODE-REVIEW.md) for the dev-binary setup.
 - **Do not commit local infrastructure details** (personal IPs, hostnames,
   account names, keys). Generic Steam Deck / SteamOS facts are fine.
 

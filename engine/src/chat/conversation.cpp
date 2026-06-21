@@ -6,14 +6,19 @@ namespace villen::chat {
 
 const char* roleName(Role r) {
     switch (r) {
-        case Role::System:    return "system";
-        case Role::User:      return "user";
-        case Role::Assistant: return "assistant";
+        case Role::System:
+            return "system";
+        case Role::User:
+            return "user";
+        case Role::Assistant:
+            return "assistant";
     }
     return "user";
 }
 
-void Conversation::setSystem(std::string content) { system_ = std::move(content); }
+void Conversation::setSystem(std::string content) {
+    system_ = std::move(content);
+}
 
 void Conversation::addUser(std::string content) {
     turns_.push_back({Role::User, std::move(content)});
@@ -33,7 +38,9 @@ void Conversation::append(Role role, std::string content) {
 
 void Conversation::reset(bool clearSystem) {
     turns_.clear();
-    if (clearSystem) system_.clear();
+    if (clearSystem) {
+        system_.clear();
+    }
 }
 
 std::vector<Turn> Conversation::messages() const {

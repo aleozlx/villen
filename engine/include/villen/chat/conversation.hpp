@@ -31,7 +31,9 @@ struct Turn {
 inline bool operator==(const Turn& a, const Turn& b) {
     return a.role == b.role && a.content == b.content;
 }
-inline bool operator!=(const Turn& a, const Turn& b) { return !(a == b); }
+inline bool operator!=(const Turn& a, const Turn& b) {
+    return !(a == b);
+}
 
 // One conversation's state. The system prompt is held separately from the
 // dialogue (it is operator-set, §9, and survives reset); the dialogue is the
@@ -39,7 +41,7 @@ inline bool operator!=(const Turn& a, const Turn& b) { return !(a == b); }
 // ordered list the host serialises to /v1/chat/completions, and prompt.hpp
 // renders for the fallback raw-prompt path.
 class Conversation {
-public:
+ public:
     // Operator-set system prompt (§9). Empty string clears it.
     void setSystem(std::string content);
     const std::string& system() const { return system_; }
@@ -80,10 +82,10 @@ public:
     // requires user-first). Returns the number of turns dropped.
     std::size_t capToTokens(std::size_t budget);
 
-    static constexpr std::size_t kCharsPerToken = 4;   // rough GPT-ish ratio
+    static constexpr std::size_t kCharsPerToken = 4;       // rough GPT-ish ratio
     static constexpr std::size_t kPerMessageOverhead = 4;  // role delimiters
 
-private:
+ private:
     std::string system_;
     std::vector<Turn> turns_;
 };

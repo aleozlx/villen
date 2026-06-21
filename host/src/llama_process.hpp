@@ -22,13 +22,13 @@
 namespace villen::chat {
 
 struct LlamaSpawnConfig {
-    std::string bin;            // path to the llama-server executable
-    std::string model;          // -m <model.gguf> (operator-supplied, §11)
+    std::string bin;    // path to the llama-server executable
+    std::string model;  // -m <model.gguf> (operator-supplied, §11)
     std::string host = "127.0.0.1";
     int port = 8080;
-    int ngl = 99;               // -ngl: GPU layers (offload all; tuned later §6)
-    int parallel = 2;           // --parallel N: concurrent slots (§8)
-    int ctxSize = 0;            // -c N: context tokens (0 = llama-server default)
+    int ngl = 99;      // -ngl: GPU layers (offload all; tuned later §6)
+    int parallel = 2;  // --parallel N: concurrent slots (§8)
+    int ctxSize = 0;   // -c N: context tokens (0 = llama-server default)
     std::vector<std::string> extraArgs;
 };
 
@@ -61,10 +61,10 @@ class LlamaProcess {
     // operator's context-window value; it takes effect on switchModel()/restart().
     void setContextSize(int n) { cfg_.ctxSize = n; }
 
-    bool ready() const { return ready_; }     // /health returned 200 (model up)
+    bool ready() const { return ready_; }  // /health returned 200 (model up)
     bool running() const { return pid_ > 0; }
-    bool paused() const { return paused_; }    // stop()ped, awaiting a load
-    bool switching() const { return switchStartMs_ != 0; }  // reload in flight
+    bool paused() const { return paused_; }                          // stop()ped, awaiting a load
+    bool switching() const { return switchStartMs_ != 0; }           // reload in flight
     std::uint64_t switchLatencyMs() const { return lastSwitchMs_; }  // last reload
     pid_t pid() const { return pid_; }
     int port() const { return cfg_.port; }
@@ -79,12 +79,12 @@ class LlamaProcess {
     LlamaSpawnConfig cfg_;
     pid_t pid_ = -1;
     bool ready_ = false;
-    bool paused_ = false;             // stop()ped: don't respawn until told to
-    bool restarting_ = false;         // the next reap is intentional, not a crash
-    std::uint64_t nextSpawnMs_ = 0;   // backoff gate after a death
-    std::uint64_t nextHealthMs_ = 0;  // throttle for health probes
-    std::uint64_t switchStartMs_ = 0; // reload timer start; 0 = not switching
-    std::uint64_t lastSwitchMs_ = 0;  // duration of the last completed reload
+    bool paused_ = false;              // stop()ped: don't respawn until told to
+    bool restarting_ = false;          // the next reap is intentional, not a crash
+    std::uint64_t nextSpawnMs_ = 0;    // backoff gate after a death
+    std::uint64_t nextHealthMs_ = 0;   // throttle for health probes
+    std::uint64_t switchStartMs_ = 0;  // reload timer start; 0 = not switching
+    std::uint64_t lastSwitchMs_ = 0;   // duration of the last completed reload
     std::string lastError_;
 
     void spawn(std::uint64_t nowMs);

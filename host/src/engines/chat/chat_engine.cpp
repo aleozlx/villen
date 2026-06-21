@@ -35,14 +35,13 @@ std::string strField(const json& j, const char* key) {
 // --- §7 server -> client frames ---------------------------------------------
 
 std::string deltaMsg(const std::string& convId, int msgId, const std::string& delta) {
-    json msg = {{"type", "chatDelta"}, {"convId", convId}, {"msgId", msgId},
-                {"delta", delta}};
+    json msg = {{"type", "chatDelta"}, {"convId", convId}, {"msgId", msgId}, {"delta", delta}};
     return msg.dump();
 }
 
-std::string doneMsg(const std::string& convId, int msgId, const char* stopReason,
-                    int tokens, double tps) {
-    json msg = {{"type", "chatDone"}, {"convId", convId}, {"msgId", msgId},
+std::string doneMsg(const std::string& convId, int msgId, const char* stopReason, int tokens,
+                    double tps) {
+    json msg = {{"type", "chatDone"},       {"convId", convId}, {"msgId", msgId},
                 {"stopReason", stopReason}, {"tokens", tokens}, {"tps", tps}};
     return msg.dump();
 }
@@ -71,7 +70,9 @@ std::vector<std::string> tokenize(const std::string& s) {
 }
 
 double tokensPerSec(int emitted, std::uint64_t startMs, std::uint64_t nowMs) {
-    if (startMs == 0 || nowMs <= startMs) return 0.0;
+    if (startMs == 0 || nowMs <= startMs) {
+        return 0.0;
+    }
     return static_cast<double>(emitted) * 1000.0 / static_cast<double>(nowMs - startMs);
 }
 
@@ -162,8 +163,12 @@ ChatEngine::Gen* ChatEngine::genFor(ConnId conn, const std::string& convId) {
 void ChatEngine::removeGen(ConnId conn, const std::string& convId, bool abort) {
     gens_.erase(std::remove_if(gens_.begin(), gens_.end(),
                                [&](const Gen& g) {
-                                   if (g.conn != conn || g.convId != convId) return false;
-                                   if (abort && g.reqId && llama_) llama_->cancel(g.reqId);
+                                   if (g.conn != conn || g.convId != convId) {
+                                       return false;
+                                   }
+                                   if (abort && g.reqId && llama_) {
+                                       llama_->cancel(g.reqId);
+                                   }
                                    return true;
                                }),
                 gens_.end());
@@ -172,13 +177,14 @@ void ChatEngine::removeGen(ConnId conn, const std::string& convId, bool abort) {
 bool ChatEngine::backendReady() const {
     // A spawned server must pass /health first; a connect-only backend is optimistic
     // (errors surface as backend_down); Down (and Stub-less) is never ready.
-    return mode_ == Mode::Stub ||
-           (mode_ == Mode::Llama && (!process_ || process_->ready()));
+    return mode_ == Mode::Stub || (mode_ == Mode::Llama && (!process_ || process_->ready()));
 }
 
 std::string ChatEngine::configJson() const {
     json models = json::array();
-    for (const auto& m : chat::knownModels()) models.push_back(m.id);
+    for (const auto& m : chat::knownModels()) {
+        models.push_back(m.id);
+    }
     json msg = {{"type", "chatConfig"},
                 {"model", model_},
                 {"models", std::move(models)},
@@ -219,16 +225,13 @@ std::string ChatEngine::requestBody(const chat::Conversation& c) const {
     // Primary path (§4): send structured messages; llama-server applies the GGUF's
     // own chat template. The host never touches raw special-token strings.
     json messages = json::array();
-    for (const auto& t : c.messages())
+    for (const auto& t : c.messages()) {
         messages.push_back({{"role", chat::roleName(t.role)}, {"content", t.content}});
-    json body = {{"model", model_},
-                 {"messages", std::move(messages)},
-                 {"stream", true},
-                 {"temperature", temperature_},
-                 {"top_p", topP_},
-                 {"top_k", topK_},
-                 {"max_tokens", maxTokens_},
-                 {"repeat_penalty", repeatPenalty_}};
+    }
+    json body = {{"model", model_},          {"messages", std::move(messages)},
+                 {"stream", true},           {"temperature", temperature_},
+                 {"top_p", topP_},           {"top_k", topK_},
+                 {"max_tokens", maxTokens_}, {"repeat_penalty", repeatPenalty_}};
     return body.dump();
 }
 
@@ -244,8 +247,12 @@ void ChatEngine::onLeave(Room&, ConnId conn, SeatId) {
     convs_.erase(conn);
     gens_.erase(std::remove_if(gens_.begin(), gens_.end(),
                                [&](const Gen& g) {
-                                   if (g.conn != conn) return false;
-                                   if (g.reqId && llama_) llama_->cancel(g.reqId);
+                                   if (g.conn != conn) {
+                                       return false;
+                                   }
+                                   if (g.reqId && llama_) {
+                                       llama_->cancel(g.reqId);
+                                   }
                                    return true;
                                }),
                 gens_.end());
@@ -288,10 +295,11 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
         c.addUser(userText);
         c.capToTokens(static_cast<std::size_t>(contextMax_));
 
-        if (mode_ == Mode::Stub)
+        if (mode_ == Mode::Stub) {
             startStub(conn, convId, userText);
-        else
+        } else {
             startLlama(room, conn, convId);
+        }
         return;
     }
 
@@ -300,14 +308,18 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
         auto it = convs_.find(conn);
         if (it != convs_.end()) {
             auto cit = it->second.find(convId);
-            if (cit != it->second.end()) cit->second.reset();  // keep system prompt
+            if (cit != it->second.end()) {
+                cit->second.reset();  // keep system prompt
+            }
         }
         return;
     }
 
     if (type == "chatStop") {
         if (Gen* g = genFor(conn, convId)) {
-            if (!g->acc.empty()) conv(conn, convId).addAssistant(g->acc);
+            if (!g->acc.empty()) {
+                conv(conn, convId).addAssistant(g->acc);
+            }
             room.send(conn, doneMsg(convId, g->msgId, "stopped", g->emitted,
                                     tokensPerSec(g->emitted, g->startMs, nowMs_)));
             removeGen(conn, convId, /*abort=*/true);
@@ -318,8 +330,7 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
     room.send(conn, errorMsg(convId, "bad_message"));
 }
 
-void ChatEngine::startStub(ConnId conn, const std::string& convId,
-                           const std::string& userText) {
+void ChatEngine::startStub(ConnId conn, const std::string& convId, const std::string& userText) {
     Gen g;
     g.conn = conn;
     g.convId = convId;
@@ -352,7 +363,9 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
             g->acc.append(d);
             ++g->emitted;  // live tok/s in the admin stats panel (§9)
         }
-        if (room_) room_->send(conn, deltaMsg(convId, msgId, std::string(d)));
+        if (room_) {
+            room_->send(conn, deltaMsg(convId, msgId, std::string(d)));
+        }
     };
     sink.onDone = [this, conn, convId, msgId](const std::string& reason, int tokens) {
         double tps = 0.0;
@@ -360,12 +373,16 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
             tps = tokensPerSec(tokens, g->startMs, nowMs_);
             conv(conn, convId).addAssistant(g->acc);
         }
-        if (room_) room_->send(conn, doneMsg(convId, msgId, reason.c_str(), tokens, tps));
+        if (room_) {
+            room_->send(conn, doneMsg(convId, msgId, reason.c_str(), tokens, tps));
+        }
         removeGen(conn, convId, /*abort=*/false);
     };
     sink.onError = [this, conn, convId, msgId](const std::string& reason) {
         (void)msgId;
-        if (room_) room_->send(conn, errorMsg(convId, reason.c_str()));
+        if (room_) {
+            room_->send(conn, errorMsg(convId, reason.c_str()));
+        }
         removeGen(conn, convId, /*abort=*/false);
     };
 
@@ -375,13 +392,19 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
         removeGen(conn, convId, /*abort=*/false);
         return;
     }
-    if (Gen* g = genFor(conn, convId)) g->reqId = rid;
+    if (Gen* g = genFor(conn, convId)) {
+        g->reqId = rid;
+    }
 }
 
 void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
     nowMs_ = nowMs;
-    if (process_) process_->tick(nowMs);  // spawn/health/restart the child (§3.A)
-    if (llama_) llama_->pump();            // drives Llama-mode sinks (may remove gens)
+    if (process_) {
+        process_->tick(nowMs);  // spawn/health/restart the child (§3.A)
+    }
+    if (llama_) {
+        llama_->pump();  // drives Llama-mode sinks (may remove gens)
+    }
 
     // Stub-mode token timer (Llama gens are driven by pump, not here).
     for (std::size_t i = 0; i < gens_.size();) {
@@ -390,7 +413,9 @@ void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
             ++i;
             continue;
         }
-        if (g.startMs == 0) g.startMs = nowMs;
+        if (g.startMs == 0) {
+            g.startMs = nowMs;
+        }
 
         while (g.next < g.tokens.size() && nowMs >= g.nextMs) {
             const std::string& tok = g.tokens[g.next];
@@ -433,11 +458,13 @@ void ChatEngine::collectPollFds(std::vector<int>& out) {
 std::string ChatEngine::statusLine() const {
     const char* backend = mode_ == Mode::Llama ? "llama" : (mode_ == Mode::Stub ? "stub" : "down");
     std::string health;
-    if (process_)
-        health = process_->ready() ? ", up"
-                                   : (std::string(", ") + process_->lastError());
+    if (process_) {
+        health = process_->ready() ? ", up" : (std::string(", ") + process_->lastError());
+    }
     std::size_t convCount = 0;
-    for (const auto& kv : convs_) convCount += kv.second.size();
+    for (const auto& kv : convs_) {
+        convCount += kv.second.size();
+    }
     return model_ + " (" + backend + health + ") - " + std::to_string(convCount) +
            " conversations, " + std::to_string(gens_.size()) + " generating";
 }
@@ -457,8 +484,8 @@ void ChatEngine::loadPendingModel() {
         // clients must not be told the switch happened.
         std::string path = pathForModel(pendingModel_);
         if (path.empty()) {
-            loadError_ = "no GGUF configured for " + pendingModel_ +
-                         " (pass --model-path " + pendingModel_ + "=/path.gguf)";
+            loadError_ = "no GGUF configured for " + pendingModel_ + " (pass --model-path " +
+                         pendingModel_ + "=/path.gguf)";
             return;
         }
         model_ = pendingModel_;
@@ -523,9 +550,13 @@ void ChatEngine::stopAll() {
 void ChatEngine::reset() {
     // Admin "new game": stop all generation and clear every conversation. Outside
     // pump(), so aborting the live requests is safe.
-    if (llama_)
-        for (const auto& g : gens_)
-            if (g.reqId) llama_->cancel(g.reqId);
+    if (llama_) {
+        for (const auto& g : gens_) {
+            if (g.reqId) {
+                llama_->cancel(g.reqId);
+            }
+        }
+    }
     gens_.clear();
     convs_.clear();
 }
@@ -551,7 +582,7 @@ namespace {
 const ImVec4 kGood{0.50f, 0.86f, 0.50f, 1.0f};
 const ImVec4 kWarn{0.95f, 0.75f, 0.35f, 1.0f};
 const ImVec4 kIdle{0.60f, 0.60f, 0.60f, 1.0f};
-const ImVec4 kErr {0.95f, 0.55f, 0.35f, 1.0f};
+const ImVec4 kErr{0.95f, 0.55f, 0.35f, 1.0f};
 }  // namespace
 
 void ChatEngine::drawAdmin_ModelPanel() {
@@ -599,30 +630,28 @@ void ChatEngine::drawAdmin_ModelPanel() {
     if (process_) {
         const chat::LlamaProcess& p = *process_;
         const char* state = p.ready()       ? "ready"
-                            : p.paused()     ? "unloaded"
-                            : p.switching()  ? "reloading"
-                            : p.running()    ? "loading"
-                                             : "down";
+                            : p.paused()    ? "unloaded"
+                            : p.switching() ? "reloading"
+                            : p.running()   ? "loading"
+                                            : "down";
         const ImVec4& col = p.ready() ? kGood : (p.paused() ? kIdle : kWarn);
         ImGui::TextColored(col, "llama-server: %s", state);
         if (p.running()) {
             // -ngl>0 requests GPU offload (Vulkan on the Deck — confirm the real
             // radeonsi vs llvmpipe in System Info, steamdeck-debugging §4); this
             // reflects the spawn request, not a runtime probe.
-            ImGui::Text("pid %d   offload: %s (-ngl %d)   slots %d",
-                        static_cast<int>(p.pid()), p.ngl() > 0 ? "GPU" : "CPU",
-                        p.ngl(), p.parallel());
+            ImGui::Text("pid %d   offload: %s (-ngl %d)   slots %d", static_cast<int>(p.pid()),
+                        p.ngl() > 0 ? "GPU" : "CPU", p.ngl(), p.parallel());
         }
         const std::size_t kb = p.residentKb();
         if (kb > 0) {
-            ImGui::Text("memory: %.0f MB   context: %d tok",
-                        static_cast<double>(kb) / 1024.0, p.ctxSize());
+            ImGui::Text("memory: %.0f MB   context: %d tok", static_cast<double>(kb) / 1024.0,
+                        p.ctxSize());
         } else {
             ImGui::Text("memory: n/a       context: %d tok", p.ctxSize());
         }
         if (p.switchLatencyMs() > 0) {
-            ImGui::Text("last reload: %.1f s",
-                        static_cast<double>(p.switchLatencyMs()) / 1000.0);
+            ImGui::Text("last reload: %.1f s", static_cast<double>(p.switchLatencyMs()) / 1000.0);
         }
         if (!p.ready() && !p.lastError().empty()) {
             ImGui::TextColored(kErr, "note: %s", p.lastError().c_str());
@@ -695,8 +724,7 @@ void ChatEngine::drawAdmin_StatsPanel() {
 
     // Per-generation metadata — id, counts, rate. NEVER the message text (§9/§11).
     if (!gens_.empty() &&
-        ImGui::BeginTable("gens", 5,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        ImGui::BeginTable("gens", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
         ImGui::TableSetupColumn("conn");
         ImGui::TableSetupColumn("conv");
         ImGui::TableSetupColumn("tokens");

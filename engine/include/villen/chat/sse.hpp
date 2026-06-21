@@ -31,8 +31,8 @@ class SseParser {
 
     struct Item {
         Kind kind;
-        int status = 0;     // set for Headers
-        std::string data;   // payload for Data; reason for Error
+        int status = 0;    // set for Headers
+        std::string data;  // payload for Data; reason for Error
     };
 
     // Feed bytes freshly read from the socket; returns the events that completed
@@ -54,14 +54,14 @@ class SseParser {
     std::string sse_;        // decoded body bytes awaiting SSE line splitting
     std::string eventData_;  // accumulated `data:` field(s) of the current event
     bool chunked_ = false;
-    bool ended_ = false;     // saw the terminating 0-chunk (logical end of body)
-    bool done_ = false;      // emitted Done/Error; ignore further input
+    bool ended_ = false;  // saw the terminating 0-chunk (logical end of body)
+    bool done_ = false;   // emitted Done/Error; ignore further input
 
     void parseHeaders(std::vector<Item>& out);
-    void decodeBody(std::vector<Item>& out);   // chunked -> sse_, or raw -> sse_
-    void parseSse(std::vector<Item>& out);     // sse_ -> Data/Done events
-    void flushEvent(std::vector<Item>& out);   // emit the pending event, if any
-    void finish(std::vector<Item>& out);       // flush + synthesize a final Done
+    void decodeBody(std::vector<Item>& out);  // chunked -> sse_, or raw -> sse_
+    void parseSse(std::vector<Item>& out);    // sse_ -> Data/Done events
+    void flushEvent(std::vector<Item>& out);  // emit the pending event, if any
+    void finish(std::vector<Item>& out);      // flush + synthesize a final Done
 };
 
 }  // namespace villen::chat
