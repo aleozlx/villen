@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 
 namespace villen::chat {
@@ -33,7 +34,11 @@ LlamaProcess::~LlamaProcess() {
 void LlamaProcess::tick(std::uint64_t nowMs) {
     reapIfExited(nowMs);
     if (pid_ <= 0) {
-        if (nowMs >= nextSpawnMs_) spawn(nowMs);
+        // paused_ holds the child down after an operator Unload (§9) until a
+        // switchModel()/restart() asks for it back — don't auto-respawn then.
+        if (!paused_ && nowMs >= nextSpawnMs_) {
+            spawn(nowMs);
+        }
         return;
     }
     if (!ready_ && nowMs >= nextHealthMs_) {
@@ -41,8 +46,46 @@ void LlamaProcess::tick(std::uint64_t nowMs) {
         if (probeHealth()) {
             ready_ = true;
             lastError_.clear();
+            if (switchStartMs_ != 0) {  // a reload just finished — record its latency
+                lastSwitchMs_ = nowMs - switchStartMs_;
+                switchStartMs_ = 0;
+            }
         }
     }
+}
+
+void LlamaProcess::switchModel(std::string modelPath, std::uint64_t nowMs) {
+    cfg_.model = std::move(modelPath);
+    restart(nowMs);
+}
+
+void LlamaProcess::restart(std::uint64_t nowMs) {
+    // Ask the child to exit; the WNOHANG reap in tick() collects it, then a fresh
+    // spawn picks up cfg_ (a new -m, -c, …). Non-blocking: we never waitpid() here.
+    // Only arm restarting_ when there's actually a child to reap — otherwise the
+    // flag would dangle and mask the *next* genuine crash as "intentional".
+    if (pid_ > 0) {
+        ::kill(pid_, SIGTERM);
+        restarting_ = true;        // so reapIfExited doesn't log this as a crash
+    } else {
+        nextSpawnMs_ = nowMs;      // already down — spawn the new model promptly
+    }
+    paused_ = false;
+    ready_ = false;
+    switchStartMs_ = nowMs;        // start the unload→reload latency timer
+    lastError_ = "reloading";
+}
+
+void LlamaProcess::stop(std::uint64_t nowMs) {
+    (void)nowMs;
+    if (pid_ > 0) {
+        ::kill(pid_, SIGTERM);
+        restarting_ = true;        // an intentional exit, not a crash
+    }
+    paused_ = true;
+    ready_ = false;
+    switchStartMs_ = 0;            // not reloading — staying down
+    lastError_ = "unloaded";
 }
 
 void LlamaProcess::spawn(std::uint64_t nowMs) {
@@ -53,6 +96,7 @@ void LlamaProcess::spawn(std::uint64_t nowMs) {
     args.push_back("--port");      args.push_back(std::to_string(cfg_.port));
     args.push_back("-ngl");        args.push_back(std::to_string(cfg_.ngl));
     args.push_back("--parallel");  args.push_back(std::to_string(cfg_.parallel));
+    if (cfg_.ctxSize > 0) { args.push_back("-c"); args.push_back(std::to_string(cfg_.ctxSize)); }
     for (const auto& a : cfg_.extraArgs) args.push_back(a);
 
     std::vector<char*> argv;
@@ -88,15 +132,51 @@ void LlamaProcess::reapIfExited(std::uint64_t nowMs) {
         ready_ = false;
         return;
     }
-    // Child exited or was signalled — surface it and schedule a restart (§3.A
-    // crash isolation: the appliance keeps running, the child comes back).
-    if (WIFSIGNALED(status))
-        lastError_ = "killed by signal " + std::to_string(WTERMSIG(status));
-    else
-        lastError_ = "exited (code " + std::to_string(WEXITSTATUS(status)) + ")";
     pid_ = -1;
     ready_ = false;
+    if (restarting_) {
+        // An operator switch/restart/unload SIGTERMed it — not a crash. Respawn
+        // promptly (no crash backoff); keep the "reloading"/"unloaded" message.
+        restarting_ = false;
+        nextSpawnMs_ = nowMs;
+        return;
+    }
+    // Child exited or was signalled on its own — surface it and schedule a
+    // restart (§3.A crash isolation: the appliance keeps running, the child
+    // comes back). A crash mid-reload still ends the latency timer.
+    switchStartMs_ = 0;
+    if (WIFSIGNALED(status)) {
+        lastError_ = "killed by signal " + std::to_string(WTERMSIG(status));
+    } else {
+        lastError_ = "exited (code " + std::to_string(WEXITSTATUS(status)) + ")";
+    }
     nextSpawnMs_ = nowMs + kRespawnBackoffMs;
+}
+
+std::size_t LlamaProcess::residentKb() const {
+    // Child RSS for the §9 "memory used" line. /proc/<pid>/statm field 2 is the
+    // resident set in pages; ×page_size gives bytes. Linux-only (the Deck) — any
+    // read failure yields 0 (the panel shows "n/a"). Cheap: a ~tens-of-bytes read.
+    if (pid_ <= 0) {
+        return 0;
+    }
+    char path[64];
+    std::snprintf(path, sizeof(path), "/proc/%d/statm", static_cast<int>(pid_));
+    std::FILE* f = std::fopen(path, "r");
+    if (!f) {
+        return 0;
+    }
+    unsigned long total = 0, resident = 0;
+    int got = std::fscanf(f, "%lu %lu", &total, &resident);
+    std::fclose(f);
+    if (got < 2) {
+        return 0;
+    }
+    long pageKb = ::sysconf(_SC_PAGESIZE) / 1024;
+    if (pageKb <= 0) {
+        return 0;
+    }
+    return static_cast<std::size_t>(resident) * static_cast<std::size_t>(pageKb);
 }
 
 bool LlamaProcess::probeHealth() {

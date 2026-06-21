@@ -56,9 +56,12 @@ if(SDL2_FOUND AND OpenGL_FOUND)
         ${IMGUI_DIR}/imgui_widgets.cpp
         ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
         ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+        # std::string-backed InputText helpers — the chat console's growable
+        # system-prompt editor (DESIGN-chat §9) binds straight to a std::string.
+        ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
     )
     target_include_directories(imgui PUBLIC
-        ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+        ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp)
     target_link_libraries(imgui PUBLIC SDL2::SDL2 OpenGL::GL)
 
     # Vendored QR generator (Nayuki, MIT) for the join-URL panel.

@@ -22,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "engine.hpp"
@@ -46,6 +47,11 @@ struct ChatBackendConfig {
     std::string model;        // -m model for the spawned server (§11)
     int ngl = 99;             // -ngl GPU layers (§6)
     int parallel = 2;         // --parallel slots (§8)
+    // Operator-supplied model id → GGUF path map (§11; weights are not shipped),
+    // from repeated --model-path id=path. The admin console's Load/Switch (§9)
+    // resolves the selected model id to a path here and restarts llama-server
+    // with it. The first entry (or `model`) is the model loaded at startup.
+    std::vector<std::pair<std::string, std::string>> modelPaths;
 };
 
 class ChatEngine : public IEngine {
@@ -73,7 +79,17 @@ class ChatEngine : public IEngine {
     int contextMax_ = 8192;
     float temperature_ = 0.7f;
     float topP_ = 0.95f;
+    int topK_ = 40;
     int maxTokens_ = 512;
+    float repeatPenalty_ = 1.1f;
+
+    // Admin console (§9) state: the model the operator has picked in the combo but
+    // not yet committed (Load/Switch applies it), and the last load's feedback.
+    std::string pendingModel_ = model_;
+    std::string loadError_;
+    // Operator-supplied model id → GGUF path (from ChatBackendConfig::modelPaths);
+    // empty path / missing id ⇒ that model can't be loaded (no weights shipped, §11).
+    std::unordered_map<std::string, std::string> modelPaths_;
 
     Mode mode_ = Mode::Down;
     std::unique_ptr<chat::LlamaClient> llama_;     // set in Llama mode
@@ -93,6 +109,7 @@ class ChatEngine : public IEngine {
         int msgId = 0;
         std::string acc;             // reply so far; appended to the conv on done
         std::uint64_t startMs = 0;   // first-token time, for tok/s
+        int emitted = 0;             // deltas streamed so far (live admin tok/s, §9)
         bool stub = false;
         // Stub timer:
         std::vector<std::string> tokens;
@@ -119,6 +136,18 @@ class ChatEngine : public IEngine {
     void startLlama(Room&, ConnId, const std::string& convId);
     std::string requestBody(const chat::Conversation&) const;  // /v1/chat body
     std::string configJson() const;                            // chatConfig (§7)
+
+    // GGUF path for a model id, or "" if the operator configured none (§11).
+    std::string pathForModel(const std::string& id) const;
+    // Operator "Load/Switch" (§9): commit pendingModel_ as the active model, push
+    // chatConfig, and (in spawn mode) restart llama-server with its GGUF.
+    void loadPendingModel();
+    // Operator "Stop all" (§9): abort every in-flight generation (keep the
+    // conversations); reset() additionally clears the conversations ("new game").
+    void stopAll();
+    void drawAdmin_ModelPanel();   // §9 model select/switch + llama-server health
+    void drawAdmin_ParamsPanel();  // §9 generation params + system-prompt editor
+    void drawAdmin_StatsPanel();   // §9 live stats (metadata only — privacy, §11)
 };
 
 class ChatFactory : public IEngineFactory {

@@ -1,6 +1,8 @@
 #include "chat_engine.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <string>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -8,7 +10,10 @@
 #include "room.hpp"
 
 #ifdef VILLEN_ADMIN_UI
+#include <cfloat>  // FLT_MIN — the ImGui "stretch to width" sentinel
+
 #include "imgui.h"
+#include "imgui_stdlib.h"  // ImGui::InputTextMultiline(std::string&) — system prompt
 #endif
 
 using json = nlohmann::json;
@@ -70,6 +75,17 @@ double tokensPerSec(int emitted, std::uint64_t startMs, std::uint64_t nowMs) {
 }  // namespace
 
 ChatEngine::ChatEngine(ChatBackendConfig cfg) {
+    // The operator-supplied model id → GGUF map (§11): the console's Load/Switch
+    // resolves a selected id to a path here. Fold the legacy single --model path
+    // in under the startup model id so it stays switchable-back-to.
+    for (const auto& kv : cfg.modelPaths) {
+        modelPaths_[kv.first] = kv.second;
+    }
+    if (!cfg.model.empty() && !modelPaths_.count(model_)) {
+        modelPaths_[model_] = cfg.model;
+    }
+    pendingModel_ = model_;
+
     if (!cfg.llamaBin.empty()) {
         // Spawn-and-manage: the host owns the llama-server child (§3.A).
         mode_ = Mode::Llama;
@@ -81,6 +97,7 @@ ChatEngine::ChatEngine(ChatBackendConfig cfg) {
         sp.port = port;
         sp.ngl = cfg.ngl;
         sp.parallel = cfg.parallel;
+        sp.ctxSize = contextMax_;  // -c: bound KV memory to the host's context cap (§5)
         process_ = std::make_unique<chat::LlamaProcess>(std::move(sp));
         llama_ = std::make_unique<chat::LlamaClient>(cfg.llamaHost, port);
     } else if (cfg.llamaPort > 0) {
@@ -141,7 +158,9 @@ std::string ChatEngine::requestBody(const chat::Conversation& c) const {
                  {"stream", true},
                  {"temperature", temperature_},
                  {"top_p", topP_},
-                 {"max_tokens", maxTokens_}};
+                 {"top_k", topK_},
+                 {"max_tokens", maxTokens_},
+                 {"repeat_penalty", repeatPenalty_}};
     return body.dump();
 }
 
@@ -221,9 +240,8 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
     if (type == "chatStop") {
         if (Gen* g = genFor(conn, convId)) {
             if (!g->acc.empty()) conv(conn, convId).addAssistant(g->acc);
-            room.send(conn, doneMsg(convId, g->msgId, "stopped",
-                                    static_cast<int>(g->next ? g->next : g->acc.size()),
-                                    tokensPerSec(static_cast<int>(g->next), g->startMs, nowMs_)));
+            room.send(conn, doneMsg(convId, g->msgId, "stopped", g->emitted,
+                                    tokensPerSec(g->emitted, g->startMs, nowMs_)));
             removeGen(conn, convId, /*abort=*/true);
         }
         return;
@@ -262,7 +280,10 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
     // after detach can't dereference a dead Room.
     chat::StreamSink sink;
     sink.onDelta = [this, conn, convId, msgId](std::string_view d) {
-        if (Gen* g = genFor(conn, convId)) g->acc.append(d);
+        if (Gen* g = genFor(conn, convId)) {
+            g->acc.append(d);
+            ++g->emitted;  // live tok/s in the admin stats panel (§9)
+        }
         if (room_) room_->send(conn, deltaMsg(convId, msgId, std::string(d)));
     };
     sink.onDone = [this, conn, convId, msgId](const std::string& reason, int tokens) {
@@ -308,6 +329,7 @@ void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
             room.send(g.conn, deltaMsg(g.convId, g.msgId, tok));
             g.acc += tok;
             ++g.next;
+            ++g.emitted;  // mirrors the Llama sink so the admin stats panel is uniform
             g.nextMs = nowMs + kStubIntervalMs;
         }
 
@@ -334,6 +356,56 @@ std::string ChatEngine::statusLine() const {
            " conversations, " + std::to_string(gens_.size()) + " generating";
 }
 
+std::string ChatEngine::pathForModel(const std::string& id) const {
+    auto it = modelPaths_.find(id);
+    return it != modelPaths_.end() ? it->second : std::string();
+}
+
+void ChatEngine::loadPendingModel() {
+    loadError_.clear();
+    model_ = pendingModel_;
+    if (process_) {
+        // Spawn mode: actually reload llama-server with the selected GGUF (§5: one
+        // model at a time, switch = restart the child). Without a configured path
+        // we can't load weights (operator-supplied, §11) — relabel only, say so.
+        std::string path = pathForModel(model_);
+        if (path.empty()) {
+            loadError_ = "no GGUF configured for " + model_ +
+                         " (pass --model-path " + model_ + "=/path.gguf)";
+        } else {
+            process_->setContextSize(contextMax_);
+            process_->switchModel(path, nowMs_);
+        }
+    } else if (mode_ == Mode::Llama) {
+        // Connect-only (--llama-url): we don't own the server and can't reload it.
+        loadError_ = "external server: relabelled only (cannot reload)";
+    }
+    // Push the new active model to every client (server-authoritative, §7/§9).
+    if (room_) {
+        room_->broadcast(configJson());
+    }
+}
+
+void ChatEngine::stopAll() {
+    // Abort every in-flight generation as if each client had sent chatStop: keep
+    // the partial reply, tell the client, cancel the backend request. The
+    // conversations are preserved (reset() is the destructive "new game"). Safe to
+    // abort here — the admin path, not inside LlamaClient::pump().
+    for (Gen& g : gens_) {
+        if (!g.acc.empty()) {
+            conv(g.conn, g.convId).addAssistant(g.acc);
+        }
+        if (room_) {
+            room_->send(g.conn, doneMsg(g.convId, g.msgId, "stopped", g.emitted,
+                                        tokensPerSec(g.emitted, g.startMs, nowMs_)));
+        }
+        if (g.reqId && llama_) {
+            llama_->cancel(g.reqId);
+        }
+    }
+    gens_.clear();
+}
+
 void ChatEngine::reset() {
     // Admin "new game": stop all generation and clear every conversation. Outside
     // pump(), so aborting the live requests is safe.
@@ -347,27 +419,208 @@ void ChatEngine::reset() {
 void ChatEngine::drawAdmin() {
 #ifdef VILLEN_ADMIN_UI
     // The engine's own panel body only — the shell owns the chrome (admin-shell
-    // §8). Default ImGui font is ASCII-only, so keep text ASCII. Model + params
-    // are server-authoritative (§9). The full model console (load/switch, health,
-    // queue depth, the system-prompt editor) is step 6; this is a minimal console.
-    const auto& models = chat::knownModels();
-    if (ImGui::BeginCombo("Model", model_.c_str())) {
-        for (const auto& m : models) {
-            bool sel = (m.id == model_);
-            if (ImGui::Selectable(m.displayName.c_str(), sel)) {
-                model_ = m.id;
-                if (room_) room_->broadcast(configJson());  // push to all clients
+    // §8). Default ImGui font is ASCII-only, so keep text ASCII. The model + every
+    // sampling param are server-authoritative (§9). Privacy by construction: this
+    // console shows metadata, never message content (§9/§11).
+    drawAdmin_ModelPanel();
+    ImGui::Spacing();
+    drawAdmin_ParamsPanel();
+    ImGui::Spacing();
+    drawAdmin_StatsPanel();
+#endif
+}
+
+#ifdef VILLEN_ADMIN_UI
+namespace {
+// Health-line colours, matching the seat-status palette in admin_ui.cpp: green
+// good, amber transitional, grey idle/down.
+const ImVec4 kGood{0.50f, 0.86f, 0.50f, 1.0f};
+const ImVec4 kWarn{0.95f, 0.75f, 0.35f, 1.0f};
+const ImVec4 kIdle{0.60f, 0.60f, 0.60f, 1.0f};
+const ImVec4 kErr {0.95f, 0.55f, 0.35f, 1.0f};
+}  // namespace
+
+void ChatEngine::drawAdmin_ModelPanel() {
+    ImGui::SeparatorText("Model");
+
+    // The combo picks a *pending* model; Load/Switch commits it (§9) — so the
+    // operator chooses, then deliberately triggers the multi-second reload.
+    const chat::ModelInfo* pend = chat::findModel(pendingModel_);
+    const char* preview = pend ? pend->displayName.c_str() : pendingModel_.c_str();
+    if (ImGui::BeginCombo("Select", preview)) {
+        for (const auto& m : chat::knownModels()) {
+            // In spawn mode a model needs a configured GGUF to be loadable (§11);
+            // show the others but disable them so the choice is honest.
+            const bool loadable = !process_ || !pathForModel(m.id).empty();
+            const bool sel = (m.id == pendingModel_);
+            ImGui::BeginDisabled(!loadable);
+            std::string label = m.displayName;
+            if (!loadable) {
+                label += "  (no GGUF)";
             }
-            if (sel) ImGui::SetItemDefaultFocus();
+            if (ImGui::Selectable(label.c_str(), sel)) {
+                pendingModel_ = m.id;
+            }
+            ImGui::EndDisabled();
+            if (sel) {
+                ImGui::SetItemDefaultFocus();
+            }
         }
         ImGui::EndCombo();
     }
-    ImGui::SliderFloat("Temperature", &temperature_, 0.0f, 2.0f, "%.2f");
-    ImGui::Spacing();
-    ImGui::TextUnformatted(statusLine().c_str());
-    ImGui::Spacing();
-    if (ImGui::Button("Stop all")) reset();
-#endif
+    ImGui::SameLine();
+    const bool busy = process_ && process_->switching();
+    ImGui::BeginDisabled(mode_ == Mode::Down || busy);
+    if (ImGui::Button(pendingModel_ == model_ ? "Reload" : "Load / Switch")) {
+        loadPendingModel();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::Text("active: %s", model_.c_str());
+    if (!loadError_.empty()) {
+        ImGui::TextColored(kErr, "%s", loadError_.c_str());
+    }
+
+    // --- llama-server health (§9): PID, offload, memory, context, last error ---
+    if (process_) {
+        const chat::LlamaProcess& p = *process_;
+        const char* state = p.ready()       ? "ready"
+                            : p.paused()     ? "unloaded"
+                            : p.switching()  ? "reloading"
+                            : p.running()    ? "loading"
+                                             : "down";
+        const ImVec4& col = p.ready() ? kGood : (p.paused() ? kIdle : kWarn);
+        ImGui::TextColored(col, "llama-server: %s", state);
+        if (p.running()) {
+            // -ngl>0 requests GPU offload (Vulkan on the Deck — confirm the real
+            // radeonsi vs llvmpipe in System Info, steamdeck-debugging §4); this
+            // reflects the spawn request, not a runtime probe.
+            ImGui::Text("pid %d   offload: %s (-ngl %d)   slots %d",
+                        static_cast<int>(p.pid()), p.ngl() > 0 ? "GPU" : "CPU",
+                        p.ngl(), p.parallel());
+        }
+        const std::size_t kb = p.residentKb();
+        if (kb > 0) {
+            ImGui::Text("memory: %.0f MB   context: %d tok",
+                        static_cast<double>(kb) / 1024.0, p.ctxSize());
+        } else {
+            ImGui::Text("memory: n/a       context: %d tok", p.ctxSize());
+        }
+        if (p.switchLatencyMs() > 0) {
+            ImGui::Text("last reload: %.1f s",
+                        static_cast<double>(p.switchLatencyMs()) / 1000.0);
+        }
+        if (!p.ready() && !p.lastError().empty()) {
+            ImGui::TextColored(kErr, "note: %s", p.lastError().c_str());
+        }
+        if (ImGui::Button("Restart")) {
+            process_->restart(nowMs_);
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(p.paused());
+        if (ImGui::Button("Unload")) {
+            process_->stop(nowMs_);
+        }
+        ImGui::EndDisabled();
+    } else if (mode_ == Mode::Llama) {
+        ImGui::TextDisabled("external llama-server (connect mode; not managed here)");
+    } else if (mode_ == Mode::Stub) {
+        ImGui::TextDisabled("stub backend: echoes input, no inference");
+    } else {
+        ImGui::TextDisabled("no backend (run --engine chat with --llama-bin,");
+        ImGui::TextDisabled("  --llama-url, or --chat-stub)");
+    }
 }
+
+void ChatEngine::drawAdmin_ParamsPanel() {
+    ImGui::SeparatorText("Generation");
+    // Server-authoritative sampling (§7/§9): these feed every request body and
+    // apply to the next chatSend; in-flight generations keep their own params.
+    ImGui::SliderFloat("Temperature", &temperature_, 0.0f, 2.0f, "%.2f");
+    ImGui::SliderFloat("Top-p", &topP_, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderInt("Top-k", &topK_, 0, 200);
+    ImGui::SliderInt("Max tokens", &maxTokens_, 16, 4096);
+    ImGui::SliderFloat("Repeat penalty", &repeatPenalty_, 1.0f, 2.0f, "%.2f");
+
+    // Context window: both the host's token cap (capToTokens, §5) and the next
+    // llama-server -c. Broadcast on release (not every drag frame) since clients
+    // read contextMax from chatConfig (§7); the backend picks it up on next start.
+    ImGui::SliderInt("Context (tok)", &contextMax_, 512, 32768);
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+        if (process_) {
+            process_->setContextSize(contextMax_);
+        }
+        if (room_) {
+            room_->broadcast(configJson());
+        }
+    }
+
+    ImGui::SeparatorText("System prompt");
+    // Operator-set (§9): prepended to every conversation as the system turn and
+    // preserved across chatReset; applies to the next chatSend per conversation.
+    ImGui::InputTextMultiline("##sysprompt", &systemPrompt_, ImVec2(-FLT_MIN, 72.0f));
+    ImGui::TextDisabled("applied on the next message per conversation");
+}
+
+void ChatEngine::drawAdmin_StatsPanel() {
+    ImGui::SeparatorText("Live");
+    std::size_t convCount = 0;
+    for (const auto& kv : convs_) {
+        convCount += kv.second.size();
+    }
+    const int slots = process_ ? process_->parallel() : 0;
+
+    std::string head = "conversations: " + std::to_string(convCount) +
+                       "    generating: " + std::to_string(gens_.size());
+    if (slots > 0) {
+        head += " / " + std::to_string(slots) + " slots";
+    }
+    ImGui::TextUnformatted(head.c_str());
+    // No real request queue yet (§8 is a later step): beyond the in-flight count a
+    // second send per conversation is rejected with model_busy, not enqueued.
+
+    // Per-generation metadata — id, counts, rate. NEVER the message text (§9/§11).
+    if (!gens_.empty() &&
+        ImGui::BeginTable("gens", 5,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn("conn");
+        ImGui::TableSetupColumn("conv");
+        ImGui::TableSetupColumn("tokens");
+        ImGui::TableSetupColumn("tok/s");
+        ImGui::TableSetupColumn("elapsed");
+        ImGui::TableHeadersRow();
+        for (const Gen& g : gens_) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("%llu", static_cast<unsigned long long>(g.conn));
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextUnformatted(g.convId.c_str());
+            ImGui::TableSetColumnIndex(2);
+            ImGui::Text("%d", g.emitted);
+            ImGui::TableSetColumnIndex(3);
+            ImGui::Text("%.1f", tokensPerSec(g.emitted, g.startMs, nowMs_));
+            ImGui::TableSetColumnIndex(4);
+            const double sec = (g.startMs && nowMs_ > g.startMs)
+                                   ? static_cast<double>(nowMs_ - g.startMs) / 1000.0
+                                   : 0.0;
+            ImGui::Text("%.1f s", sec);
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::Spacing();
+    ImGui::BeginDisabled(gens_.empty());
+    if (ImGui::Button("Stop all")) {
+        stopAll();
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(gens_.empty() && convCount == 0);
+    if (ImGui::Button("Clear all")) {
+        reset();
+    }
+    ImGui::EndDisabled();
+}
+#endif  // VILLEN_ADMIN_UI
 
 }  // namespace villen

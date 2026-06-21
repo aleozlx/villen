@@ -73,6 +73,17 @@ int main(int argc, char** argv) {
             chatCfg.llamaBin = argv[++i];  // spawn & manage this llama-server (§3.A)
         } else if (std::strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
             chatCfg.model = argv[++i];     // -m GGUF for the spawned server (§11)
+        } else if (std::strcmp(argv[i], "--model-path") == 0 && i + 1 < argc) {
+            // id=path: register a switchable model for the admin console (§9). The
+            // operator supplies the weights (§11); repeat for each model.
+            std::string spec = argv[++i];
+            auto eq = spec.find('=');
+            if (eq != std::string::npos && eq > 0 && eq + 1 < spec.size()) {
+                chatCfg.modelPaths.emplace_back(spec.substr(0, eq), spec.substr(eq + 1));
+            } else {
+                std::fprintf(stderr, "villen: --model-path expects id=path, got '%s'\n",
+                             spec.c_str());
+            }
         } else if (std::strcmp(argv[i], "--llama-ngl") == 0 && i + 1 < argc) {
             chatCfg.ngl = std::atoi(argv[++i]);       // GPU layers (§6)
         } else if (std::strcmp(argv[i], "--llama-parallel") == 0 && i + 1 < argc) {
