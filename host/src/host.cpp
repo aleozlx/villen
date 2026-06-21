@@ -26,6 +26,7 @@ void Host::startEngine(std::size_t index) {
     stopEngine();  // guarantee a clean slate before constructing the next
 
     active_ = engines_[index]->create();          // ctor acquires the engine's resources
+    if (!active_) return;                          // creation failed: stay at the launcher
     room_ = std::make_unique<Room>(ws_, *active_, active_->seats());
     active_->attach(*room_);                       // admin actions can now reach transport
     activeIndex_ = index;
