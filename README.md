@@ -82,14 +82,15 @@ connected over WebSocket on the same thread:
 
 ## Experimental engines (design drafts)
 
-The slot is game-agnostic, so chess is only the first occupant. These are
-**design drafts** (not yet built) — each chosen to stress a *different* axis of
-the architecture. See [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md)
-for the full rationale, coverage matrix, and the "pick by axis, not by app"
-selection method.
+The slot is game-agnostic, so chess is only the first occupant. The table starts
+with chess — the **built** spine — and descends into a slate of **design drafts**
+(not yet built), each chosen to stress a *different* axis of the architecture. See
+[`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md) for the full
+rationale, coverage matrix, and the "pick by axis, not by app" selection method.
 
 | Engine | What it is | Axis it stresses |
 |---|---|---|
+| [`chess`](docs/DESIGN-villen.md) **(built)** | the first engine and the reference: 2-seat turn-based board game, regular + fairy variants | the spine itself — authority, legality, turn order |
 | [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
 | [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
 | [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
