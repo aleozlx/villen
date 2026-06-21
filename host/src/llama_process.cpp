@@ -26,8 +26,12 @@ LlamaProcess::~LlamaProcess() {
     if (pid_ > 0) {
         ::kill(pid_, SIGTERM);
         // Reap so we don't leave a zombie; SIGTERM is enough for llama-server.
+        // Loop on EINTR so a signal interrupting waitpid mid-shutdown can't leave
+        // the child unreaped.
         int status = 0;
-        ::waitpid(pid_, &status, 0);
+        while (::waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
+            // interrupted before the child was reaped — retry
+        }
     }
 }
 
@@ -228,7 +232,14 @@ bool LlamaProcess::probeHealth() {
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(static_cast<std::uint16_t>(cfg_.port));
-    ::inet_pton(AF_INET, cfg_.host.c_str(), &addr.sin_addr);
+    // Numeric loopback is expected (we spawned the server); accept "localhost" as a
+    // convenience, mirroring LlamaClient. Without this a non-numeric host would
+    // inet_pton to 0.0.0.0 and the probe would falsely report "not ready" forever.
+    const char* hostNumeric = (cfg_.host == "localhost") ? "127.0.0.1" : cfg_.host.c_str();
+    if (::inet_pton(AF_INET, hostNumeric, &addr.sin_addr) != 1) {
+        ::close(fd);
+        return false;
+    }
 
     bool ok = false;
     auto cleanup = [&]() {

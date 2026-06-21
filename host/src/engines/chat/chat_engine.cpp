@@ -347,7 +347,7 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
     g.conn = conn;
     g.convId = convId;
     g.msgId = nextMsgId_++;
-    g.startMs = nowMs_;
+    g.startMs = 0;  // stamped on the first delta so tok/s excludes TTFT (like the stub)
     const int msgId = g.msgId;
     gens_.push_back(std::move(g));
 
@@ -360,6 +360,9 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
     chat::StreamSink sink;
     sink.onDelta = [this, conn, convId, msgId](std::string_view d) {
         if (Gen* g = genFor(conn, convId)) {
+            if (g->startMs == 0) {
+                g->startMs = nowMs_;  // first-token time: tok/s measures generation, not TTFT
+            }
             g->acc.append(d);
             ++g->emitted;  // live tok/s in the admin stats panel (§9)
         }

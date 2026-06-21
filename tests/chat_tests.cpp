@@ -381,3 +381,19 @@ TEST_CASE("SSE: an overflowing chunk size cannot bypass the bounds check") {
     }
     CHECK(dones == 0);
 }
+
+TEST_CASE("SSE: a malformed (non-hex) chunk size is a protocol error, not a clean end") {
+    // strtoul yields 0 for both "0" (the real terminator) and garbage like "zz".
+    // The parser must tell them apart: a non-hex size line is corruption and must
+    // surface as Error, never be mistaken for the 0-chunk that ends the stream.
+    const std::string wire = std::string(kHdr) + "zznothex\r\ndata: {\"d\":\"x\"}\n\n";
+    auto items = drain(wire, /*byteWise=*/false);
+    int errors = 0, dones = 0;
+    for (const auto& it : items) {
+        errors += (it.kind == SseParser::Kind::Error);
+        dones += (it.kind == SseParser::Kind::Done);
+    }
+    CHECK(errors == 1);
+    CHECK(dones == 0);
+    CHECK(dataPayloads(items).empty());
+}

@@ -294,12 +294,12 @@ class MemSampler(threading.Thread):
         super().__init__(daemon=True)
         self.pid = pid
         self.interval = interval
-        self._stop = threading.Event()
+        self._stop_evt = threading.Event()
         self.min_avail_kb = None
         self.peak_rss_kb = None
 
     def run(self):
-        while not self._stop.is_set():
+        while not self._stop_evt.is_set():
             mi = read_meminfo()
             avail = mi.get("MemAvailable")
             if avail is not None:
@@ -309,10 +309,10 @@ class MemSampler(threading.Thread):
             if rss is not None:
                 if self.peak_rss_kb is None or rss > self.peak_rss_kb:
                     self.peak_rss_kb = rss
-            self._stop.wait(self.interval)
+            self._stop_evt.wait(self.interval)
 
     def stop(self):
-        self._stop.set()
+        self._stop_evt.set()
         self.join(timeout=2)
 
 

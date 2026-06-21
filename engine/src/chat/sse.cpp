@@ -80,7 +80,7 @@ void SseParser::parseHeaders(std::vector<Item>& out) {
     }
 }
 
-void SseParser::decodeBody(std::vector<Item>&) {
+void SseParser::decodeBody(std::vector<Item>& out) {
     if (!chunked_) {
         // Not chunked: the body is the raw SSE stream until the socket closes.
         sse_ += buf_;
@@ -93,9 +93,20 @@ void SseParser::decodeBody(std::vector<Item>&) {
         if (crlf == std::string::npos) {
             return;  // size line incomplete
         }
-        // Hex size, ignoring any ";chunk-ext" suffix.
-        std::size_t size =
-            static_cast<std::size_t>(std::strtoul(buf_.substr(0, crlf).c_str(), nullptr, 16));
+        // Hex size, ignoring any ";chunk-ext" suffix. strtoul stops at the first
+        // non-hex char; endp == start means it consumed no digit at all, i.e. a
+        // malformed size line. That must NOT be mistaken for the 0-chunk
+        // terminator (strtoul also yields 0 there) — surface it as a protocol
+        // error instead of silently ending the stream.
+        std::string sizeLine = buf_.substr(0, crlf);
+        char* endp = nullptr;
+        unsigned long parsed = std::strtoul(sizeLine.c_str(), &endp, 16);
+        if (endp == sizeLine.c_str()) {
+            out.push_back({Kind::Error, 0, "protocol_error"});
+            done_ = true;
+            return;
+        }
+        std::size_t size = static_cast<std::size_t>(parsed);
         if (size == 0) {  // last chunk; trailers (if any) are ignored
             buf_.clear();
             ended_ = true;
