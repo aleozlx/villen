@@ -89,6 +89,55 @@ ldd ./your_binary            # prints "version `GLIBC_2.xx' not found"
     `/home/deck/.ssh/authorized_keys`, `chmod 700 ~/.ssh`, `chmod 600` the file)
     and deploy straight into `/home/deck`.
 
+### 3.1 Long jobs over SSH die on disconnect (the logind trap)
+
+**Symptom:** a model download (or any long job) started over SSH stops the moment
+the `ssh` command returns — even with `nohup` *and* `setsid`. You reconnect and the
+file is half-written, the process gone.
+
+**Cause:** SteamOS's `systemd-logind` tears down the **whole user slice** when your
+last session for that user ends (`KillUserProcesses` behaviour). `nohup` (ignores
+SIGHUP) and `setsid` (new session) don't help — logind kills the cgroup, not via
+SIGHUP, so detaching from the terminal doesn't exempt you.
+
+**Fix — keep a session alive for the job's duration.** Simplest is to run the job
+in the **foreground of a long-lived `ssh`** (e.g. a backgrounded task on the build
+host that holds the connection); when it returns, the job is done. Alternatives:
+`systemd-run --scope -- <cmd>` (runs in a transient scope that outlives the
+session) or `loginctl enable-linger deck` once (keeps the user manager running).
+
+**Downloading weights on the Deck.** The 4–5 GB GGUFs come off HuggingFace, whose
+CDN drops connections mid-transfer; a plain `curl -C -` won't resume a *broken*
+stream, it just exits non-zero. Wrap it in a resume-until-complete loop, inside the
+held session:
+
+```bash
+until curl -L -C - --retry 20 --retry-delay 3 --retry-all-errors \
+           --connect-timeout 20 -o "$out" "$url"; do sleep 3; done
+```
+
+(`-C -` resumes from bytes-on-disk on each restart; `--retry` rides out transient
+errors within one curl run.) Put weights on the SD card (`/run/media/deck/SD256/…`)
+— roomy, but slow, and the load cost is sneaky: a **cold** model load is I/O-bound
+off the card, and llama.cpp's default **mmap does random reads**, which the card
+handles badly — a cold 7B Q4 measured **~10 min**, vs ~1 min warm (and a concurrent
+download, or loading another model that evicts this one from page cache, makes a
+"fast" load suddenly cold again — that's the usual surprise). Mitigations: pre-read
+the file sequentially to warm the cache (`cat model.gguf > /dev/null`, ~1 min at the
+card's sequential rate) so the mmap load hits RAM, or pass `llama-server --no-mmap`
+(sequential load, more RSS). A warm load is then seconds.
+
+### 3.2 Redeploying a *running* binary
+
+- **`scp` fails with `dest open … : Failure` (ETXTBSY).** You can't overwrite an
+  executable that's currently running. Stop the process first, then copy.
+- **`pkill -f "Villen/villen"` kills its own shell.** With `-f` (full-cmdline
+  match) the pattern string appears in pkill's *own* argv, so it matches and kills
+  the shell running it before reaching the target — looks like "the kill silently
+  did nothing." Match on the process name instead: `pkill -x villen` (and
+  `pkill -x llama-server`); the killing shell's `comm` is `bash`/`ssh`, not the
+  target, so no self-match. Verify with `pgrep -xc villen` before re-`scp`.
+
 ---
 
 ## 4. Game Mode testing (the risks the spike exists to retire)

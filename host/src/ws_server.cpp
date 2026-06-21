@@ -6,6 +6,7 @@
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <array>
@@ -155,11 +156,19 @@ bool WsServer::listen(std::uint16_t port) {
         return false;
     }
     setNonBlocking(listenFd_);
-    port_ = port;
+    // Read the actually-bound port back rather than trusting the argument: with
+    // port 0 the OS assigns an ephemeral one, and callers (the admin join URL, the
+    // integration tests) need port() to report what was bound, not the 0 asked for.
+    sockaddr_in bound{};
+    socklen_t blen = sizeof(bound);
+    if (::getsockname(listenFd_, reinterpret_cast<sockaddr*>(&bound), &blen) == 0)
+        port_ = ntohs(bound.sin_port);
+    else
+        port_ = port;
     return true;
 }
 
-void WsServer::poll(int timeoutMs) {
+void WsServer::poll(int timeoutMs, const std::vector<int>& extraReadFds) {
     if (listenFd_ < 0) return;
 
     std::vector<pollfd> pfds;
@@ -170,6 +179,14 @@ void WsServer::poll(int timeoutMs) {
         if (!c.outbuf.empty()) events |= POLLOUT;
         pfds.push_back({c.fd, events, 0});
         order.push_back(id);
+    }
+    // Foreign fds (an engine's inference socket): watched only so their readiness
+    // ends the block early. They sit after the conn fds, past `order.size()`, so
+    // the per-conn loop below never touches them — the owner reads them in onTick.
+    for (int fd : extraReadFds) {
+        if (fd >= 0) {
+            pfds.push_back({fd, POLLIN, 0});
+        }
     }
 
     int n = ::poll(pfds.data(), pfds.size(), timeoutMs);
@@ -284,9 +301,26 @@ void WsServer::serveHttp(ConnId id, const std::string& request) {
         return;
     }
     if (auto q = path.find('?'); q != std::string::npos) path.resize(q);
-    if (path.empty() || path == "/") path = "/index.html";
+    if (path.empty() || path == "/") {
+        path = "/index.html";
+    } else if (path.back() == '/') {
+        path += "index.html";  // directory -> its index
+    }
     if (path.find("..") != std::string::npos) {  // refuse path traversal
         respond("400 Bad Request", "text/plain", "400\n");
+        return;
+    }
+
+    // A directory requested without a trailing slash (e.g. /chat) must 301 to
+    // /chat/ so the browser resolves the page's relative assets (style.css,
+    // chat.js) against the directory, not its parent — and so the directory isn't
+    // opened as a file. Only true directories redirect; missing paths fall to 404.
+    struct stat st {};
+    if (::stat((staticRoot_ + path).c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+        c.outbuf += "HTTP/1.1 301 Moved Permanently\r\nLocation: " + path +
+                    "/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        c.closing = true;
+        flush(c);
         return;
     }
 

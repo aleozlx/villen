@@ -1,0 +1,5 @@
+*.bin
+.diskbench-testfile.bin
+results-*.json
+results-*.md
+__pycache__/

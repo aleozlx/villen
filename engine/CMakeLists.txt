@@ -32,3 +32,21 @@ target_include_directories(villen_filter PUBLIC
 
 target_compile_features(villen_filter PUBLIC cxx_std_17)
 add_library(villen::filter ALIAS villen_filter)
+
+# The pure chat core (DESIGN-chat.md §2/§4/§13): conversation state + the
+# per-model prompt-templating table. No llama, no networking, no GPU — the
+# deterministic, CI-tested half of the chat engine, a sibling library to
+# villen_engine (the stochastic generation lives behind the inference boundary
+# in the host, §3.A). Always built, always testable.
+add_library(villen_chat
+    src/chat/conversation.cpp
+    src/chat/prompt.cpp
+    src/chat/sse.cpp
+)
+
+target_include_directories(villen_chat PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_features(villen_chat PUBLIC cxx_std_17)
+add_library(villen::chat ALIAS villen_chat)

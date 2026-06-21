@@ -70,6 +70,14 @@ class IEngine {
     // it (framework §5.1). `nowMs` is a monotonic millisecond clock.
     virtual void onTick(Room&, std::uint64_t /*nowMs*/) {}
 
+    // Engines that own pollable fds (e.g. a streaming inference socket) append them
+    // here. The host folds them into its poll() so it wakes the instant one is
+    // readable instead of waiting out the poll timeout to the next onTick — that's
+    // the difference between per-token streaming feeling instant vs. ~tick-laggy.
+    // These are wakeup hints only: the engine still does the actual read in onTick.
+    // Default: none (turn-based engines don't override).
+    virtual void collectPollFds(std::vector<int>& /*out*/) {}
+
     // Optional admin surfaces (admin-shell §8). statusLine is a generic one-line
     // roster status; drawAdmin draws *only* the engine's own panel body (no
     // chrome) and is a no-op headless. Both may use room() for state/actions.

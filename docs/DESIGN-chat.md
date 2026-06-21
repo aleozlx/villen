@@ -141,6 +141,25 @@ the test suite can drive with no model or GPU. 3.B remains fully specified above
 the fork is a cheap flip if single-binary purity is ever judged to outweigh
 isolation and testability.
 
+### 3.C Talking to the spawned server directly (a 3.A bonus, for debugging)
+
+Because 3.A runs a *real* OpenAI-compatible `llama-server` (not an embedded
+library), the resident model is reachable directly — independent of Villen's wire
+protocol — which is handy for debugging, scripting, or a quick CLI chat:
+
+- **Raw API / web UI.** The server binds loopback (`127.0.0.1:<llama-port>`, the
+  `--llama-url` port). `curl .../v1/chat/completions` speaks the OpenAI schema, and
+  `llama-server` serves its own browser UI at `/`. It is loopback-only **by
+  design** — Villen is the sole LAN edge (§6/§9.5), so the inference port is never
+  bound to `0.0.0.0`; reach it off-box with an SSH tunnel, not by exposing it.
+- **`llama-cli`.** The same llama.cpp build ships a CLI; pointed at the GGUF with
+  `-ngl N` it is an interactive REPL. It loads its **own** copy of the model,
+  though — a second resident model the one-model-at-a-time budget (§5) doesn't
+  account for, so stop Villen's instance (or expect the memory pressure) first.
+
+This falls out of the architecture rather than being a feature to build: it's a
+direct consequence of choosing a subprocess over an embedded library (3.A vs 3.B).
+
 ---
 
 ## 4. Models & prompt templating (the pure, testable core)
@@ -396,6 +415,22 @@ Cheap now, painful to retrofit (mirrors DESIGN §9, `filter` §11):
 Steps 1–2 deliver the full streaming UX with **no inference and no Deck risk** (all
 on the PC); steps 3–5 add the real backend; step 7 retires the APU/memory unknowns.
 
+**Status (first Deck bring-up).** Steps 1–6 are implemented; 1–5 are verified on the
+device. Qwen2.5-7B-Instruct-Q4_K_M streams end to end over **RADV Vulkan** on the
+Vangogh APU (real token streaming, multi-turn context, reset, and llama-server
+crash-restart all confirmed), and live model switching across all three template
+families (Llama-3 headers / ChatML / Mistral `[INST]`) renders cleanly with no
+leaked special tokens (step 5). The admin console — model select/switch, params,
+stats, queue, restart (step 6) — is built. **Step 7 is recorded:** the
+`spike/chat-bench/` harness ran on the Van Gogh APU (2026-06-21) — ~14–15 tok/s
+single-stream on RADV Vulkan, ~27–30 tok/s aggregate at 4 clients, one model
+resident leaving ~5.7–6.9 GB free, Vulkan ~2.9× CPU (§15.6, numbers in the
+spike's README). The one **non-measured** acceptance item left is manual: a
+**phone on the LAN** opening `/chat/` against the live host (watch for AP client
+isolation, steamdeck-debugging §5). Engineering refinements found while building
+are tracked in §18 (both follow-ups — the fully-async `/health` probe and the
+Python e2e harness in CI — are now done).
+
 ---
 
 ## 15. Acceptance criteria (definition of done)
@@ -466,3 +501,39 @@ on the PC); steps 3–5 add the real backend; step 7 retires the APU/memory unkn
 - **Secure context** — chat itself needs no camera/mic, so it is **not** blocked by
   the `getUserMedia` secure-context wall `filter` hit (§10 there); plain HTTP on the
   LAN works. (If voice input is ever added, that wall returns.)
+
+---
+
+## 18. Implementation refinements (engineering follow-ups, post-Step-4)
+
+Concrete refinements surfaced while building steps 1–4 — distinct from the §17
+*product* questions; these are known engineering debts with a clear shape.
+
+- **Generation socket in the main `poll()` set — DONE.** The llama generation fds
+  are folded into `WsServer::poll()` (`IEngine::collectPollFds` → `Host` →
+  `LlamaClient::collectFds`), so an inbound token ends the poll block at once
+  instead of waiting out the ~100 ms `onTick` timeout. Before this, the SSE drain
+  ran only at the tick cadence, capping perceived streaming smoothness; now the
+  loop wakes on the token. The fds are watched read-only as wakeup hints — the
+  engine still does the actual read in `onTick`/`pump()`. (The admin/Game-Mode loop
+  already spun at vsync, so this mainly fixes the headless/SSH path.)
+- **Fully-async `/health` probe — DONE.** `LlamaProcess::probeHealth` used to be a
+  bounded but *blocking* GET (~60 ms worst case) while the model loaded. It is now
+  an across-ticks non-blocking state machine (connect → send → read, each a
+  `poll(timeout=0)`), with the in-flight probe socket folded into the host
+  `poll()` set (`LlamaProcess::collectPollFds` → `ChatEngine::collectPollFds`) so
+  the loop wakes on the response instead of waiting out the tick timeout. A
+  per-attempt deadline backstops a wedged connect; the fd is closed on every
+  teardown path. tick() never blocks now, even on the headless/SSH path during a
+  cold load.
+- **Python e2e harnesses into CI — DONE.** [`tests/chat_e2e.py`](../tests/chat_e2e.py)
+  is a pure-stdlib WebSocket client that drives the **real** host binary in spawn
+  mode against the LLM-free fake `llama-server`
+  ([`spike/chat-bench/fake_llama_server.py`](../spike/chat-bench/fake_llama_server.py)),
+  asserting the §3.A transport the C++ suites can't reach: spawn + `/health` gate +
+  SSE streaming (`chatDelta`→`chatDone`), malformed-payload rejection
+  (`chatError` "bad_message", no crash), and crash-restart recovery (SIGKILL the
+  child → host reaps + respawns → a fresh turn works). Registered as the `chat_e2e`
+  ctest (guarded on `VILLEN_BUILD_HOST` + Python 3 + the fake server), so the
+  existing CI `ctest` step runs it — LLM-free and GPU-free, keeping the §13
+  discipline.

@@ -101,6 +101,26 @@ view) is designed in [`docs/DESIGN-admin-shell.md`](docs/DESIGN-admin-shell.md).
 forward-looking note on whether the appliance could patch its own minor bugs is in
 [`docs/DESIGN-self-hotfix.md`](docs/DESIGN-self-hotfix.md).
 
+### 🎮⚡ `chat` — measured on the actual Steam Deck APU
+
+The `chat` engine is past paper: its local-LLM path is up on the Deck's **Van Gogh
+APU via RADV Vulkan** (never software-GL `llvmpipe`), and a Step 7 throughput spike
+([`spike/chat-bench/`](spike/chat-bench/)) quantifies it across all three models
+(measured 2026-06-21, `llama-server` b9744, 7–8B Q4_K_M):
+
+- 🚀 **~14–15 tok/s** single-stream decode — Qwen2.5-7B **14.4**, Llama-3.1-8B **13.7**,
+  Mistral-7B **14.8** — at **sub-second TTFT** (~0.5–0.85 s). Reads faster than you do.
+- 👥 **Batching scales (§8):** 4 concurrent clients reach **~27–30 tok/s aggregate**
+  while each stream degrades gracefully (≈14 → 11 → 7.5 tok/s from 1 → 2 → 4 slots).
+- 🧠 **Fits with room to spare (§5):** one model resident leaves **~5.7–6.9 GB** of the
+  16 GB unified memory free, with the device awake and under load.
+- 🐌➡️🏎️ **Vulkan ≈ 2.9× CPU:** 14.4 vs **4.96 tok/s** (`-ngl 0`) on Qwen — the APU
+  offload earns its keep.
+- 📈 **The `--parallel` trade-off traces a clean [Pareto curve](spike/chat-bench/README.md#concurrency-pareto-frontier)** — per-stream speed vs system throughput, with the sweet spot at 2 slots.
+
+Full table, method, and the CPU/concurrency breakdown:
+[`spike/chat-bench/README.md`](spike/chat-bench/README.md).
+
 ## Repository layout
 
 | Path | What |
@@ -163,6 +183,52 @@ can move with the mouse **or** a gamepad interchangeably.
 | `--port N` | TCP port for the player WebSocket + HTTP client (default 9002). |
 | `--headless` | Run the server loop without opening the admin window. |
 | `--client-dir DIR` | Serve the browser client from `DIR` (defaults to the source tree). |
+| `--engine NAME` | Boot straight into an engine (`chess`, `chat`) instead of the launcher. |
+
+### Running the `chat` engine (local LLM)
+
+The `chat` engine runs a local LLM through a managed `llama-server` child
+([DESIGN-chat](docs/DESIGN-chat.md) §3.A). **Villen ships no model weights** — they
+are operator-supplied by design (size + licensing, §11): nothing is downloaded
+automatically. You fetch the GGUF files once and point the host at them.
+
+```bash
+# One model, spawned and managed by the host:
+./build/host/villen --engine chat --headless \
+  --llama-bin /path/to/llama-server \
+  --model     /path/to/qwen2.5-7b-instruct-q4_k_m.gguf
+
+# Or register several switchable models (admin console / SIGUSR1 cycles them):
+./build/host/villen --engine chat \
+  --llama-bin  /path/to/llama-server \
+  --models-dir /path/to/ggufs
+```
+
+| Flag | Effect |
+|---|---|
+| `--llama-bin PATH` | Spawn & manage this `llama-server` binary (§3.A). |
+| `--model PATH` | The GGUF to load at startup. |
+| `--model-path id=PATH` | Register a switchable model by id; repeat per model. |
+| `--models-dir DIR` | Scan a directory for `*.gguf` and auto-register recognized files. |
+| `--llama-url HOST:PORT` | Talk to an already-running `llama-server` instead of spawning one. |
+| `--chat-stub` | In-host echo generator — no model, no GPU (dev/CI). |
+
+**Getting the models.** Download the Q4_K_M GGUFs from HuggingFace. A filename is
+auto-recognized (for `--models-dir` and admin labelling) when it contains the model
+id, e.g. `qwen2.5-7b-instruct-q4_k_m.gguf` or `Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf`:
+
+| Model | License | GGUF source (e.g.) |
+|---|---|---|
+| Qwen2.5 7B Instruct | Apache-2.0 | `Qwen/Qwen2.5-7B-Instruct-GGUF` |
+| Mistral 7B Instruct v0.3 | Apache-2.0 | `bartowski/Mistral-7B-Instruct-v0.3-GGUF` |
+| Llama 3.1 8B Instruct | Llama 3.1 Community License | `bartowski/Meta-Llama-3.1-8B-Instruct-GGUF` |
+
+One model is resident at a time (~5 GB each, §5); the operator switches between them
+in the admin console. The `llama-server` binary is operator-supplied too. On the
+Steam Deck, put the weights on the SD card and use the resume-until-complete
+download loop in [`docs/steamdeck-debugging.md`](docs/steamdeck-debugging.md) §3.1
+(the HuggingFace CDN drops mid-transfer), and cross-build `llama-server` per the
+glibc notes there.
 
 ## License
 
