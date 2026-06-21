@@ -116,8 +116,11 @@ chat::Conversation& ChatEngine::conv(ConnId conn, const std::string& convId) {
 }
 
 ChatEngine::Gen* ChatEngine::genFor(ConnId conn, const std::string& convId) {
-    for (auto& g : gens_)
-        if (g.conn == conn && g.convId == convId) return &g;
+    for (auto& g : gens_) {
+        if (g.conn == conn && g.convId == convId) {
+            return &g;
+        }
+    }
     return nullptr;
 }
 
@@ -363,22 +366,29 @@ std::string ChatEngine::pathForModel(const std::string& id) const {
 
 void ChatEngine::loadPendingModel() {
     loadError_.clear();
-    model_ = pendingModel_;
     if (process_) {
         // Spawn mode: actually reload llama-server with the selected GGUF (§5: one
         // model at a time, switch = restart the child). Without a configured path
-        // we can't load weights (operator-supplied, §11) — relabel only, say so.
-        std::string path = pathForModel(model_);
+        // we can't load the weights (operator-supplied, §11) — refuse and bail
+        // WITHOUT relabelling: the child is still running the old model, so
+        // clients must not be told the switch happened.
+        std::string path = pathForModel(pendingModel_);
         if (path.empty()) {
-            loadError_ = "no GGUF configured for " + model_ +
-                         " (pass --model-path " + model_ + "=/path.gguf)";
-        } else {
-            process_->setContextSize(contextMax_);
-            process_->switchModel(path, nowMs_);
+            loadError_ = "no GGUF configured for " + pendingModel_ +
+                         " (pass --model-path " + pendingModel_ + "=/path.gguf)";
+            return;
         }
-    } else if (mode_ == Mode::Llama) {
-        // Connect-only (--llama-url): we don't own the server and can't reload it.
-        loadError_ = "external server: relabelled only (cannot reload)";
+        model_ = pendingModel_;
+        process_->setContextSize(contextMax_);
+        process_->switchModel(path, nowMs_);
+    } else {
+        // Stub / connect-only (--llama-url) / down: no child to reload, so
+        // committing the id only relabels (the request body's "model" field and
+        // the advertised name). Connect-only says so, since it can mislead.
+        model_ = pendingModel_;
+        if (mode_ == Mode::Llama) {
+            loadError_ = "external server: relabelled only (cannot reload)";
+        }
     }
     // Push the new active model to every client (server-authoritative, §7/§9).
     if (room_) {

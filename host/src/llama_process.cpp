@@ -113,6 +113,17 @@ void LlamaProcess::spawn(std::uint64_t nowMs) {
     if (pid == 0) {  // child
         // New process group so a stray child doesn't take signals meant for us.
         ::setpgid(0, 0);
+        // Close inherited fds (the WsServer listen socket, live LlamaClient
+        // sockets, …) before exec so llama-server holds none of them: otherwise
+        // the child keeps the host's port bound and a host restart can't rebind.
+        // Keep 0/1/2 so the child's stdout/stderr logging is still visible.
+        long maxFd = ::sysconf(_SC_OPEN_MAX);
+        if (maxFd < 0) {
+            maxFd = 1024;
+        }
+        for (int fd = 3; fd < static_cast<int>(maxFd); ++fd) {
+            ::close(fd);
+        }
         ::execvp(argv[0], argv.data());
         _exit(127);  // exec failed
     }

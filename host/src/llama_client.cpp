@@ -173,6 +173,10 @@ void LlamaClient::handleItem(Req& r, const SseParser::Item& it) {
             auto ch = j.find("choices");
             if (ch == j.end() || !ch->is_array() || ch->empty()) return;
             const json& c0 = (*ch)[0];
+            // choices[0] from an untrusted backend may not be an object (null,
+            // string, …) — guard before find(), the same type-check-before-access
+            // discipline as ChatEngine::strField (defense in depth).
+            if (!c0.is_object()) return;
             auto d = c0.find("delta");
             if (d != c0.end() && d->is_object()) {
                 auto cont = d->find("content");

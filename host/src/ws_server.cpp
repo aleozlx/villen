@@ -6,6 +6,7 @@
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <array>
@@ -296,6 +297,19 @@ void WsServer::serveHttp(ConnId id, const std::string& request) {
     else if (path.back() == '/') path += "index.html";  // directory -> its index
     if (path.find("..") != std::string::npos) {  // refuse path traversal
         respond("400 Bad Request", "text/plain", "400\n");
+        return;
+    }
+
+    // A directory requested without a trailing slash (e.g. /chat) must 301 to
+    // /chat/ so the browser resolves the page's relative assets (style.css,
+    // chat.js) against the directory, not its parent — and so the directory isn't
+    // opened as a file. Only true directories redirect; missing paths fall to 404.
+    struct stat st {};
+    if (::stat((staticRoot_ + path).c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+        c.outbuf += "HTTP/1.1 301 Moved Permanently\r\nLocation: " + path +
+                    "/\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        c.closing = true;
+        flush(c);
         return;
     }
 
