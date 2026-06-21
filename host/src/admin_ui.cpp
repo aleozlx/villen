@@ -337,7 +337,9 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
         else
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-        ws.poll(0);  // drain the network on the SAME thread as the UI (§5)
+        ws.poll(0);                 // drain the network on the SAME thread as the UI (§5)
+        host.tick(SDL_GetTicks());  // advance real-time engines (onTick) every frame —
+                                    // SDL_GetTicks is a monotonic ms clock since init
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();

@@ -6,8 +6,9 @@
 // No locks, no worker threads (DESIGN §5).
 //
 // The host carries several engines as factories and runs ONE at a time
-// (DESIGN-game-framework §1). With `--engine NAME` it boots straight into that
-// engine (kiosk / headless / CI); the launcher UI lands in a follow-up step.
+// (DESIGN-game-framework §1). With a display it opens the admin-shell launcher to
+// pick an engine; `--engine NAME` (or headless, which has no launcher) boots
+// straight into one instead (kiosk / CI).
 #include <chrono>
 #include <csignal>
 #include <cstdint>

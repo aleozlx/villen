@@ -72,13 +72,17 @@ class IEngine {
     // Admin "new game".
     virtual void reset() {}
 
-    // Villen calls this once, right after building the Room, so admin-triggered
+    // Villen calls attach() right after building the Room, so admin-triggered
     // actions (reset, a drawAdmin button) can reach the transport without the
-    // network passing a Room& in (those paths aren't network events).
+    // network passing a Room& in (those paths aren't network events). It calls
+    // detach() at teardown — before destroying the Room — so the engine's
+    // destructor can't use-after-free a Room that has outlived this pointer.
     void attach(Room& r) { room_ = &r; }
+    void detach() { room_ = nullptr; }
 
  protected:
-    Room* room_ = nullptr;  // valid for the engine's whole life (set by attach)
+    Room* room_ = nullptr;  // valid between attach() and detach() (the active
+                            // engine's lifetime); null otherwise — guard before use
 };
 
 // One IEngine instance per active room; the launcher picks among factories
