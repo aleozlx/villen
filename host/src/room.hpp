@@ -70,11 +70,14 @@ class Room {
     std::vector<Seat> seats_;
     std::string session_ = "default";
 
-    // Every connection the engine has seen onJoin for (seated or spectator), so
-    // onClose can fire a matching onLeave for unseated members too. Per-connection
-    // engines (chat, filter) keep state keyed by ConnId, not by seat, and need the
-    // departure signal to release it (privacy, DESIGN-chat §11); seat-based engines
-    // (chess) simply ignore a kNoSeat onLeave.
+    // Connections the engine currently owes exactly one onLeave: every conn for
+    // which an onJoin (seated or spectator) is outstanding. Role transitions keep
+    // this balanced — a spectator taking a seat gets onLeave(kNoSeat) before
+    // onJoin(s) (handleJoin), and freeSeat moves a seated conn back to spectator
+    // with onLeave(s) then onJoin(kNoSeat) — so onClose can fire one final onLeave
+    // and erase. Per-connection engines (chat, filter) key state by ConnId, not
+    // seat, and need that departure signal to release it (privacy, DESIGN-chat
+    // §11); seat-based engines (chess) just ignore a kNoSeat onLeave.
     std::unordered_set<ConnId> members_;
 
     void handleJoin(ConnId, const std::string& requested);
