@@ -18,3 +18,10 @@ add_executable(engine_tests engine_tests.cpp)
 target_link_libraries(engine_tests PRIVATE villen::engine doctest::doctest)
 
 add_test(NAME engine_tests COMMAND engine_tests)
+
+# The pure `filter` morphology reference (DESIGN-filter.md §13 step 1): same GPU-
+# free, always-on CI discipline as the chess engine tests above.
+add_executable(filter_tests filter_tests.cpp)
+target_link_libraries(filter_tests PRIVATE villen::filter doctest::doctest)
+
+add_test(NAME filter_tests COMMAND filter_tests)
