@@ -9,8 +9,8 @@
 > Mistral 7B Instruct**, as GGUF, one resident at a time, operator-selectable.
 
 **Status:** design / additive. Intended as a starting brief for the agent who will
-build it. Decisions are recommended-with-rationale and recorded as forks, not
-frozen.
+build it. The **integration model is decided — 3.A, subprocess `llama-server`**
+(§3); remaining decisions are recommended-with-rationale and recorded as forks.
 **Scope:** the slice that proves a *long-running, blocking, streaming* engine fits
 Villen's single-thread spine — prompt in, tokens out, operator-tuned model + params.
 **Audience:** the engineer/agent standing this up, having read
@@ -84,7 +84,7 @@ inside the cooperative ~60 Hz loop: a synchronous `generate()` would freeze the
 admin UI, chess, and every other chat. Two sanctioned realizations of DESIGN §5,
 both already idiomatic in Villen:
 
-### 3.A Subprocess `llama-server` + non-blocking streaming socket in `poll()`  *(recommended)*
+### 3.A Subprocess `llama-server` + non-blocking streaming socket in `poll()`  *(decided)*
 
 Run `llama.cpp`'s built-in **`llama-server`** (OpenAI-compatible) as a managed
 child process. The host opens a **non-blocking** local TCP connection to it, POSTs
@@ -106,13 +106,19 @@ exactly as [`DESIGN-spectator-and-agent-api.md`](DESIGN-spectator-and-agent-api.
 - **Less code to own.** `llama-server` brings mature streaming, continuous batching,
   multi-slot concurrency, and chat-template application for free. The host's job
   shrinks to **orchestrate + proxy**, not "embed an inference engine."
+- **Easier to test, and the boundary is just text.** The host↔`llama-server` channel
+  is plain JSON-over-HTTP with an SSE token stream over loopback — trivially
+  inspectable and **mockable**: the HTTP/SSE client and the whole streaming spine can
+  be tested against a tiny stub server (or a recorded SSE transcript) with **no model
+  and no GPU**, extending the "CI stays LLM-free" story (§13). Embedding (3.B) gives
+  no such seam — you'd be mocking `libllama` itself.
 - **Cost:** a second long-running process (bends "single binary" to *single
   foreground binary + one managed inference child*), a small hand-rolled
   non-blocking HTTP/1.1 + SSE client (~150 lines, reusing the socket idiom already
   in [`ws_server.cpp`](../host/src/ws_server.cpp)), and shipping the `llama-server`
   binary alongside the host.
 
-### 3.B Embedded `libllama` + one worker thread + one guarded queue  *(purist alternative)*
+### 3.B Embedded `libllama` + one worker thread + one guarded queue  *(recorded alternative — not chosen)*
 
 Link `libllama` (+`ggml` + the Vulkan backend) into the host; run the
 `llama_decode` token loop on **one** worker thread that posts each token to **one**
@@ -125,11 +131,13 @@ Exactly one thread, exactly one queue — the literal §5 escape hatch.
   appliance); and a markedly heavier cross-build (the glibc trap of
   steamdeck-debugging §2 now also covers `ggml`/Vulkan in *your* binary).
 
-**Recommendation: 3.A.** It keeps the host single-threaded (the property §5 fought
-to preserve), isolates the riskiest, memory-hungriest code in a process that can be
-restarted, and lets the implementing agent write a proxy instead of an inference
-engine. 3.B is fully specified above so the fork is a cheap flip if single-binary
-purity is later judged to outweigh isolation.
+**Decision: 3.A.** It keeps the host single-threaded (the property §5 fought to
+preserve), isolates the riskiest, memory-hungriest code in a process that can be
+restarted, lets the implementing agent write a proxy instead of an inference engine,
+and — decisively — makes the inference boundary a **plain-text, mockable seam** that
+the test suite can drive with no model or GPU. 3.B remains fully specified above so
+the fork is a cheap flip if single-binary purity is ever judged to outweigh
+isolation and testability.
 
 ---
 
@@ -349,8 +357,10 @@ Cheap now, painful to retrofit (mirrors DESIGN §9, `filter` §11):
   - The host integration (subprocess + HTTP/SSE client) compiles into the host;
     absent a model/`llama-server` at runtime, `--engine chat` reports
     `backend_down` cleanly rather than crashing (degrade, don't fail).
-- **CI stays LLM-free and GPU-free:** it builds and tests the pure core; the
-  inference path is integration-tested where a model + `llama-server` exist.
+- **CI stays LLM-free and GPU-free:** it builds and tests the pure core *and* the
+  HTTP/SSE client + streaming spine against a **stub server** (a few canned
+  `data:` chunks over loopback) — no model, no GPU (§3.A). The real backend is
+  integration-tested only where a model + `llama-server` exist.
 - **Approach 3.B** instead links `libllama`+`ggml`+Vulkan into the host — heavier
   cross-build, the glibc/Vulkan trap now in your own binary.
 
@@ -412,8 +422,9 @@ on the PC); steps 3–5 add the real backend; step 7 retires the APU/memory unkn
   already rejected in [`DESIGN-spectator-and-agent-api.md`](DESIGN-spectator-and-agent-api.md)
   §5. Recorded so it reads as a decision: the APU does the work, locally.
 - **Embedded `libllama` + worker thread (3.B)** instead of the subprocess. The
-  single-binary-purist path; rejected as *primary* for losing crash isolation and
-  inflating the cross-build, kept as the documented fork (§3.B).
+  single-binary-purist path; rejected as *primary* for losing crash isolation,
+  inflating the cross-build, and offering no mockable seam to test against (you'd be
+  mocking `libllama` itself). Kept as the documented fork (§3.B).
 - **Blocking HTTP (libcurl) on the main thread.** Would freeze the loop for the whole
   generation — the exact §5 sin. Non-blocking SSE with the fd in `poll()` is the
   point.
