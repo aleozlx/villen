@@ -290,6 +290,14 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
     SDL_GL_MakeCurrent(win, gl);
     SDL_GL_SetSwapInterval(1);  // vsync paces the loop ~60 Hz
 
+    // Explicitly open detected controllers so Steam Input button events reach SDL
+    // reliably (the Deck's gameplay-pad path), rather than relying on the ImGui
+    // backend to auto-open them. Closed at shutdown below.
+    std::vector<SDL_GameController*> pads;
+    for (int i = 0; i < SDL_NumJoysticks(); ++i)
+        if (SDL_IsGameController(i))
+            if (SDL_GameController* p = SDL_GameControllerOpen(i)) pads.push_back(p);
+
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -357,6 +365,7 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+    for (SDL_GameController* p : pads) SDL_GameControllerClose(p);
     SDL_GL_DeleteContext(gl);
     SDL_DestroyWindow(win);
     SDL_Quit();

@@ -33,9 +33,16 @@ Incoming parse(std::string_view text) {
     Incoming in;
     json j = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (j.is_discarded() || !j.is_object() || !j.contains("type")) return in;
-    in.type = j.value("type", "");
-    in.session = j.value("session", "default");
-    in.seat = j.value("seat", "");
+    // Read each field type-checked: a key present with the wrong JSON type (from a
+    // malformed/hostile client) must yield the default, never throw a type_error
+    // that would crash the server (DoS). session/seat keep their struct defaults.
+    auto str = [&](const char* key, std::string& out) {
+        auto it = j.find(key);
+        if (it != j.end() && it->is_string()) out = it->get<std::string>();
+    };
+    str("type", in.type);
+    str("session", in.session);
+    str("seat", in.seat);
     in.ok = true;
     return in;
 }
