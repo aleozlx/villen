@@ -43,6 +43,7 @@ int main(int argc, char** argv) {
     int screenshotDelayMs = -1;
     const char* screenshotPath = nullptr;
     const char* engineName = nullptr;  // --engine: boot straight into this one
+    villen::ChatBackendConfig chatCfg;  // --engine chat backend (DESIGN-chat §3.A)
 #ifdef VILLEN_DEFAULT_CLIENT_DIR
     std::string clientDir = VILLEN_DEFAULT_CLIENT_DIR;
 #else
@@ -57,7 +58,17 @@ int main(int argc, char** argv) {
             engineName = argv[++i];
         else if (std::strcmp(argv[i], "--headless") == 0)
             headless = true;
-        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
+        else if (std::strcmp(argv[i], "--llama-url") == 0 && i + 1 < argc) {
+            // HOST:PORT of a running (or stubbed) llama-server for --engine chat.
+            std::string url = argv[++i];
+            auto colon = url.rfind(':');
+            if (colon != std::string::npos) {
+                chatCfg.llamaHost = url.substr(0, colon);
+                chatCfg.llamaPort = std::atoi(url.c_str() + colon + 1);
+            }
+        } else if (std::strcmp(argv[i], "--chat-stub") == 0) {
+            chatCfg.stub = true;  // in-host echo generator, no inference (dev/CI)
+        } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             screenshotPath = argv[++i];
             screenshotDelayMs = 2500;  // settle, let a test client connect/move
         }
@@ -74,7 +85,7 @@ int main(int argc, char** argv) {
     // launcher will list whatever is here (DESIGN-admin-shell §2).
     std::vector<std::unique_ptr<villen::IEngineFactory>> engines;
     engines.push_back(std::make_unique<villen::ChessFactory>());
-    engines.push_back(std::make_unique<villen::ChatFactory>());
+    engines.push_back(std::make_unique<villen::ChatFactory>(chatCfg));
 
     villen::Host host(ws, std::move(engines));
 

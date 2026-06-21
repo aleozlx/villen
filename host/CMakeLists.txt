@@ -15,6 +15,7 @@ add_executable(villen
     src/host.cpp
     src/engines/chess/chess_engine.cpp
     src/engines/chat/chat_engine.cpp
+    src/llama_client.cpp
 )
 # src/ on the include path so engines under src/engines/<name>/ can include the
 # framework headers (engine.hpp, room.hpp, …) by their plain names.

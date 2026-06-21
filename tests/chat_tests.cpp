@@ -7,10 +7,13 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
+#include <cstdio>
 #include <string>
+#include <vector>
 
 #include "villen/chat/conversation.hpp"
 #include "villen/chat/prompt.hpp"
+#include "villen/chat/sse.hpp"
 
 using namespace villen::chat;
 
@@ -233,4 +236,114 @@ TEST_CASE("rendered generation prompt ends ready for the assistant turn") {
         const std::string& stop = stopTokens(f).front();
         CHECK(p.rfind(stop) != p.size() - stop.size());
     }
+}
+
+// --- SSE / chunked response parser (§3.A/§13) --------------------------------
+// The riskiest hand-rolled code in the chat backend (incremental HTTP headers +
+// chunked decode + SSE framing) is pure, so it is pinned here against canned byte
+// sequences — no socket, no model, no GPU. The host's LlamaClient wraps this.
+
+namespace {
+
+// A single chunked-transfer chunk: "<hex-size>\r\n<data>\r\n".
+std::string chunk(const std::string& s) {
+    char hex[24];
+    std::snprintf(hex, sizeof hex, "%zx", s.size());
+    return std::string(hex) + "\r\n" + s + "\r\n";
+}
+
+const char* kHdr =
+    "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+    "Transfer-Encoding: chunked\r\n\r\n";
+const char* kLastChunk = "0\r\n\r\n";
+
+// Feed `wire` to a fresh parser — all at once, or one byte at a time to exercise
+// the incremental buffering — and collect every emitted item.
+std::vector<SseParser::Item> drain(const std::string& wire, bool byteWise) {
+    SseParser p;
+    std::vector<SseParser::Item> all;
+    if (byteWise) {
+        for (char c : wire) {
+            auto items = p.feed(std::string_view(&c, 1));
+            all.insert(all.end(), items.begin(), items.end());
+        }
+    } else {
+        all = p.feed(wire);
+    }
+    return all;
+}
+
+std::vector<std::string> dataPayloads(const std::vector<SseParser::Item>& items) {
+    std::vector<std::string> out;
+    for (const auto& it : items)
+        if (it.kind == SseParser::Kind::Data) out.push_back(it.data);
+    return out;
+}
+
+}  // namespace
+
+TEST_CASE("SSE: chunked llama-server stream -> headers, data events, done") {
+    const std::string wire = std::string(kHdr) +
+                             chunk("data: {\"d\":\"He\"}\n\n") +
+                             chunk("data: {\"d\":\"llo\"}\n\n") +
+                             chunk("data: [DONE]\n\n") + kLastChunk;
+
+    for (bool byteWise : {false, true}) {  // same result whole or byte-by-byte
+        auto items = drain(wire, byteWise);
+        REQUIRE(items.size() >= 4);
+        CHECK(items.front().kind == SseParser::Kind::Headers);
+        CHECK(items.front().status == 200);
+        auto data = dataPayloads(items);
+        REQUIRE(data.size() == 2);
+        CHECK(data[0] == "{\"d\":\"He\"}");   // leading space after "data:" stripped
+        CHECK(data[1] == "{\"d\":\"llo\"}");
+        CHECK(items.back().kind == SseParser::Kind::Done);
+        // Exactly one terminal event (the [DONE], not a duplicate from the 0-chunk).
+        int dones = 0;
+        for (const auto& it : items) dones += (it.kind == SseParser::Kind::Done);
+        CHECK(dones == 1);
+    }
+}
+
+TEST_CASE("SSE: stream without [DONE] is ended by the terminating 0-chunk") {
+    const std::string wire =
+        std::string(kHdr) + chunk("data: {\"d\":\"x\"}\n\n") + kLastChunk;
+    auto items = drain(wire, false);
+    auto data = dataPayloads(items);
+    REQUIRE(data.size() == 1);
+    CHECK(data[0] == "{\"d\":\"x\"}");
+    CHECK(items.back().kind == SseParser::Kind::Done);
+}
+
+TEST_CASE("SSE: non-chunked stream is finished by socket close (end())") {
+    SseParser p;
+    auto a = p.feed(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n"
+        "data: {\"d\":\"y\"}\n\n");
+    auto b = p.end();  // EOF
+    std::vector<SseParser::Item> all = a;
+    all.insert(all.end(), b.begin(), b.end());
+    auto data = dataPayloads(all);
+    REQUIRE(data.size() == 1);
+    CHECK(data[0] == "{\"d\":\"y\"}");
+    CHECK(all.back().kind == SseParser::Kind::Done);
+}
+
+TEST_CASE("SSE: non-200 status yields an error event") {
+    auto items = drain("HTTP/1.1 503 Service Unavailable\r\n\r\n", false);
+    REQUIRE(items.size() >= 2);
+    CHECK(items[0].kind == SseParser::Kind::Headers);
+    CHECK(items[0].status == 503);
+    CHECK(items[1].kind == SseParser::Kind::Error);
+}
+
+TEST_CASE("SSE: a data line split across chunk boundaries reassembles") {
+    // The "data: {...}" line is split mid-payload across two chunks.
+    const std::string wire = std::string(kHdr) + chunk("data: {\"d\":\"par") +
+                             chunk("t\"}\n\n") + chunk("data: [DONE]\n\n") +
+                             kLastChunk;
+    auto items = drain(wire, false);
+    auto data = dataPayloads(items);
+    REQUIRE(data.size() == 1);
+    CHECK(data[0] == "{\"d\":\"part\"}");
 }

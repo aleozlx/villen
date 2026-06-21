@@ -23,6 +23,7 @@ add_library(villen::engine ALIAS villen_engine)
 add_library(villen_chat
     src/chat/conversation.cpp
     src/chat/prompt.cpp
+    src/chat/sse.cpp
 )
 
 target_include_directories(villen_chat PUBLIC

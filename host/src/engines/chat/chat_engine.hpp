@@ -1,12 +1,14 @@
 // Villen — ChatEngine: local LLM chat on the IEngine contract (DESIGN-chat.md).
 //
 // Chat is the engine that proves the axis chess and filter both ducked: work
-// that genuinely blocks for seconds (§3). The real backend is a subprocess
-// `llama-server` whose streaming socket joins the host's poll() set (§3.A) — but
-// this file is **build-order step 2** (§14): the full streaming spine wired to a
-// STUB generator that echoes "you said: …" token-by-token on the onTick timer,
-// with zero inference and zero GPU. It proves chatSend → chatDelta* → chatDone
-// end to end before any model exists; step 3 swaps the stub for the SSE client.
+// that genuinely blocks for seconds (§3). The decided backend is a subprocess
+// `llama-server` whose streaming socket is read non-blocking from the host's one
+// poll loop (§3.A) — see LlamaClient. Three backend modes:
+//   - Llama (--llama-url HOST:PORT): real streaming via LlamaClient.
+//   - Stub  (--chat-stub): echoes "you said: …" token-by-token on the onTick
+//     clock — the build-order step-2 spine, zero inference/GPU, kept for dev/CI.
+//   - Down  (neither): chatSend reports backend_down cleanly (degrade, don't
+//     fail, §13); chatConfig advertises ready:false.
 //
 // Chat is per-connection, never broadcast, never persisted (§7/§11): each
 // connection owns its conversations, keyed by ConnId — so this engine declares no
@@ -23,27 +25,40 @@
 #include <vector>
 
 #include "engine.hpp"
+#include "llama_client.hpp"
 #include "villen/chat/conversation.hpp"
 #include "villen/chat/prompt.hpp"
 
 namespace villen {
 
+// How --engine chat reaches an inference backend (set from CLI, passed via the
+// factory). Default is Down: no backend wired.
+struct ChatBackendConfig {
+    std::string llamaHost = "127.0.0.1";
+    int llamaPort = 0;   // >0 → talk to llama-server here (LlamaClient)
+    bool stub = false;   // --chat-stub → in-host echo generator (no inference)
+};
+
 class ChatEngine : public IEngine {
  public:
+    explicit ChatEngine(ChatBackendConfig cfg = {});
+
     SeatRoster seats() const override { return {}; }  // per-connection; no seats
     void onJoin(Room&, ConnId, SeatId) override;      // push chatConfig
     void onLeave(Room&, ConnId, SeatId) override;     // drop the conn's state (§11)
     void onMessage(Room&, ConnId, SeatId, std::string_view) override;
-    void onTick(Room&, std::uint64_t nowMs) override; // drive the stub stream
+    void onTick(Room&, std::uint64_t nowMs) override; // pump SSE + drive the stub
     std::string statusLine() const override;
     void drawAdmin() override;
     void reset() override;                             // stop all + clear
 
  private:
+    enum class Mode { Down, Stub, Llama };
+
     // Server-authoritative model + sampling params (§7 authority / §9). The model
     // id and contextMax are pushed to clients as chatConfig; the sampling params
     // and system prompt stay host-side (the client may request nothing it can't
-    // already type, §7) and feed the real backend at step 3.
+    // already type, §7) and feed the request body in Llama mode.
     std::string model_ = "qwen2.5-7b-instruct";  // Qwen first (Apache-2.0, §14)
     std::string systemPrompt_;
     int contextMax_ = 8192;
@@ -51,45 +66,65 @@ class ChatEngine : public IEngine {
     float topP_ = 0.95f;
     int maxTokens_ = 512;
 
+    Mode mode_ = Mode::Down;
+    std::unique_ptr<chat::LlamaClient> llama_;  // set in Llama mode
+
     // Per-connection, per-convId conversation state — private, in RAM only (§11).
     std::unordered_map<ConnId,
                        std::unordered_map<std::string, chat::Conversation>>
         convs_;
 
-    // One in-flight generation per (conn, convId): turn-of-generation (§7). Step 2
-    // is a stub — `tokens` is the pre-split echo reply, emitted on the onTick clock.
+    // One in-flight generation per (conn, convId): turn-of-generation (§7). In
+    // Stub mode `tokens` is the pre-split echo reply, emitted on the onTick clock;
+    // in Llama mode `reqId` is the LlamaClient request whose sink fills `acc`.
     struct Gen {
         ConnId conn = 0;
         std::string convId;
         int msgId = 0;
-        std::vector<std::string> tokens;
-        std::size_t next = 0;        // index of the next token to emit
-        std::uint64_t nextMs = 0;    // earliest time to emit it
-        std::uint64_t startMs = 0;   // first-emit time, for tok/s
         std::string acc;             // reply so far; appended to the conv on done
+        std::uint64_t startMs = 0;   // first-token time, for tok/s
+        bool stub = false;
+        // Stub timer:
+        std::vector<std::string> tokens;
+        std::size_t next = 0;
+        std::uint64_t nextMs = 0;
+        // Llama:
+        chat::LlamaClient::ReqId reqId = 0;
     };
     std::vector<Gen> gens_;
     int nextMsgId_ = 1;
-    std::uint64_t nowMs_ = 0;  // last tick clock, so onMessage can stamp tok/s
+    std::uint64_t nowMs_ = 0;  // last tick clock, so sinks/onMessage stamp tok/s
 
     static constexpr std::uint64_t kStubIntervalMs = 60;  // ~16 tok/s, Deck-ish
 
     chat::Conversation& conv(ConnId, const std::string& convId);
     Gen* genFor(ConnId, const std::string& convId);
-    void cancel(ConnId, const std::string& convId);  // drop in-flight gen, silent
-    std::string configJson() const;                  // the chatConfig frame (§7)
+    // Remove the engine's record of a generation. `abort` also cancels the live
+    // LlamaClient request — use it ONLY outside LlamaClient::pump() (chatStop,
+    // onLeave, reset); a sink-driven removal must pass abort=false (the request is
+    // already finishing inside pump, cancelling it there would reenter the pump).
+    void removeGen(ConnId, const std::string& convId, bool abort);
+
+    void startStub(ConnId, const std::string& convId, const std::string& userText);
+    void startLlama(Room&, ConnId, const std::string& convId);
+    std::string requestBody(const chat::Conversation&) const;  // /v1/chat body
+    std::string configJson() const;                            // chatConfig (§7)
 };
 
 class ChatFactory : public IEngineFactory {
  public:
+    explicit ChatFactory(ChatBackendConfig cfg = {}) : cfg_(std::move(cfg)) {}
     std::unique_ptr<IEngine> create() override {
-        return std::make_unique<ChatEngine>();
+        return std::make_unique<ChatEngine>(cfg_);
     }
     const char* name() const override { return "chat"; }
     // The chat browser view lives in client/chat/ (served at /chat/). Per-engine
     // client routing isn't auto-wired yet, so this is the forward-compatible
     // default; for now run with the host's client/ root and open /chat/.
     const char* clientDir() const override { return "chat"; }
+
+ private:
+    ChatBackendConfig cfg_;
 };
 
 }  // namespace villen
