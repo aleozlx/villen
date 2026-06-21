@@ -78,8 +78,9 @@ need the cross-build-and-copy dance above.
   concerns on the player WebSocket edge (DESIGN §9).
 - C++17, "C with destructors" style: flat, allocation-visible, RAII for handles.
 - **Brace every `if`/`else`/`for`/`while` body, even a single statement** — no
-  unbraced guard clauses or early returns (guards against the `goto fail;`-class
-  bug and keeps later diffs safe).
+  unbraced guard clauses or early returns (`else if` chains stay flat: write
+  `else if (...) { }`, not an extra outer brace layer). Guards against the
+  `goto fail;`-class bug and keeps later diffs safe.
 - **Do not commit local infrastructure details** (personal IPs, hostnames,
   account names, keys). Generic Steam Deck / SteamOS facts are fine.
 
