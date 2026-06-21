@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="snake-head-title" color="#F0A34A">
+  <title id="snake-head-title">Snake head</title>
+  <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  
+  <g class="s"><path d="M16 27c0-9 7-15 16-15s16 6 16 15v13c0 8-7 12-16 12s-16-4-16-12z"/><path d="M24 32h1M39 32h1M28 42h8"/></g><path class="a" d="M30 20h4v4h-4z"/>
+</svg>

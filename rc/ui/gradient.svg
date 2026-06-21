@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="gradient-title" color="#F0A34A">
+  <title id="gradient-title">Gradient operator</title>
+  <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  
+  <defs><linearGradient id="gradient-fill" x1="0" x2="1"><stop stop-color="#15181D"/><stop offset="1" stop-color="#F0A34A"/></linearGradient></defs><rect x="12" y="18" width="40" height="28" rx="4" fill="url(#gradient-fill)"/><path class="s" d="M12 52h40"/>
+</svg>

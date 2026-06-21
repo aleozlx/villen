@@ -3,6 +3,14 @@
 Guidance for Claude Code working in this repo. Start with
 [`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) — the full design & handoff.
 
+Beyond chess, a slate of **experimental engines** is being designed on top of the
+game-agnostic slot (`filter`, `chat`, `snake`, `canvas`, `jam`). The index — with
+*how each was chosen* (one architectural axis each) — is
+[`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md); the Deck-side
+**launcher** that runs one engine at a time is
+[`docs/DESIGN-admin-shell.md`](docs/DESIGN-admin-shell.md). These are **design
+drafts**, not yet built.
+
 ## What this is
 Villen is a portable, single-binary game *host* you carry (and now actually
 deployed on a Steam Deck — see below): one C++ executable that runs the
@@ -38,7 +46,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
 
 ## Layout
 - `engine/` pure rules, no I/O · `host/` the native binary · `client/` browser player
-- `tests/` doctest suite · `docs/` design doc + guides · `spike/` kept Deck smoke spike
+- `tests/` doctest suite · `docs/` design docs + guides · `spike/` Deck smoke spike (→ admin-shell System Info view)
 - `third_party/` vendored deps (nlohmann single-header; Dear ImGui is a submodule per DESIGN §8)
 
 ## Working on the Steam Deck

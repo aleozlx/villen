@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="palette-title" color="#F0A34A">
+  <title id="palette-title">Color palette</title>
+  <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  
+  <g class="s"><path d="M32 12C18 12 9 22 9 34c0 11 9 19 20 19h5c5 0 7-6 3-9-2-3 0-6 4-6h4c7 0 10-5 10-11 0-9-9-15-23-15z"/><circle cx="20" cy="31" r="2"/><circle cx="29" cy="23" r="2"/><circle cx="39" cy="27" r="2"/></g>
+</svg>

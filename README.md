@@ -68,16 +68,38 @@ the network and the UI on one thread, so there is no shared-state locking
 (DESIGN §5).
 
 > **Where this is heading:** chess is compiled *into* the host today, but the
-> "engine slot" inverts — Villen becomes a **library a single game depends on**.
-> A future game (Snake, a card game, …) carries Villen as a submodule for rooms,
-> seats, and serving, and supplies only the rules + client against a small
-> `IGame` contract; one game type per binary, no IPC. See
+> "engine slot" becomes a reusable **`IEngine` contract** — several engines (chess,
+> snake, filter, …) implement it as modules in one binary, and a **launcher** runs one
+> at a time on the Deck (each engine offers its own games/variants). Each engine
+> supplies only its rules + client; Villen owns rooms,
+> seats, serving, and the admin/launcher face. See
 > [`docs/DESIGN-game-framework.md`](docs/DESIGN-game-framework.md).
 
 The in-process admin UI (session/seat table, join URL + QR), reflecting a player
 connected over WebSocket on the same thread:
 
 ![Villen admin UI](docs/admin-ui.png)
+
+## Experimental engines (design drafts)
+
+The slot is game-agnostic, so chess is only the first occupant. These are
+**design drafts** (not yet built) — each chosen to stress a *different* axis of
+the architecture. See [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md)
+for the full rationale, coverage matrix, and the "pick by axis, not by app"
+selection method.
+
+| Engine | What it is | Axis it stresses |
+|---|---|---|
+| [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
+| [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
+| [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
+| [`canvas`](docs/DESIGN-canvas.md) | a **shared collaborative drawing wall** (iPad-native) | many writers on one shared state |
+| [`jam`](docs/DESIGN-jam.md) | a **clock-synced collaborative groovebox** — devices synthesize audio locally, in sync | tight cross-device shared *time* |
+
+The Deck-side **launcher** that starts one of these at a time (plus a system-info
+view) is designed in [`docs/DESIGN-admin-shell.md`](docs/DESIGN-admin-shell.md). A
+forward-looking note on whether the appliance could patch its own minor bugs is in
+[`docs/DESIGN-self-hotfix.md`](docs/DESIGN-self-hotfix.md).
 
 ## Repository layout
 
@@ -87,8 +109,8 @@ connected over WebSocket on the same thread:
 | `tests/`  | doctest suite (perft + special-rule coverage). |
 | `host/`   | The native binary: WS server + in-process ImGui admin UI. |
 | `client/` | Browser player client (pointer **and** gamepad input adapters). |
-| `docs/`   | Design & handoff doc, [game-framework contract](docs/DESIGN-game-framework.md), architecture diagram, Steam Deck debugging guide, art brief. |
-| `spike/`  | Throwaway Deck smoke-spike sources, kept as the seed for Step 7's diagnostics window. |
+| `docs/`   | Design & handoff docs — incl. the [game-framework contract](docs/DESIGN-game-framework.md) and the [engine roadmap](docs/DESIGN-engine-roadmap.md); architecture diagram, Steam Deck debugging guide, art brief. |
+| `spike/`  | Throwaway Deck smoke-spike sources, kept as the seed for the host's diagnostics view. |
 
 ## Build
 
