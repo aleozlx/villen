@@ -138,9 +138,15 @@ void LlamaProcess::reapIfExited(std::uint64_t nowMs) {
     int status = 0;
     pid_t r = ::waitpid(pid_, &status, WNOHANG);
     if (r == 0) return;            // still running
-    if (r < 0 && errno == ECHILD) {  // already reaped somehow
-        pid_ = -1;
-        ready_ = false;
+    if (r < 0) {
+        // waitpid was interrupted (EINTR) or otherwise failed: `status` is only
+        // valid for r>0, so do NOT read it or mark the child dead — it's still
+        // running, retry next tick. Only ECHILD means it's already gone (reaped
+        // elsewhere); clear pid_ in that case.
+        if (errno == ECHILD) {
+            pid_ = -1;
+            ready_ = false;
+        }
         return;
     }
     pid_ = -1;
