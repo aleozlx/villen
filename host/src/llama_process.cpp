@@ -16,13 +16,17 @@
 namespace villen::chat {
 
 namespace {
-constexpr std::uint64_t kRespawnBackoffMs = 1000;  // after a crash, wait before retry
-constexpr std::uint64_t kHealthIntervalMs = 300;   // probe cadence during startup
+constexpr std::uint64_t kRespawnBackoffMs = 1000;      // after a crash, wait before retry
+constexpr std::uint64_t kHealthIntervalMs = 300;       // probe cadence during startup
+constexpr std::uint64_t kHealthProbeTimeoutMs = 2000;  // abort a single wedged probe
 }  // namespace
 
 LlamaProcess::LlamaProcess(LlamaSpawnConfig cfg) : cfg_(std::move(cfg)) {}
 
 LlamaProcess::~LlamaProcess() {
+    if (healthFd_ >= 0) {
+        ::close(healthFd_);  // never leak the in-flight probe socket
+    }
     if (pid_ > 0) {
         ::kill(pid_, SIGTERM);
         // Reap so we don't leave a zombie; SIGTERM is enough for llama-server.
@@ -45,16 +49,8 @@ void LlamaProcess::tick(std::uint64_t nowMs) {
         }
         return;
     }
-    if (!ready_ && nowMs >= nextHealthMs_) {
-        nextHealthMs_ = nowMs + kHealthIntervalMs;
-        if (probeHealth()) {
-            ready_ = true;
-            lastError_.clear();
-            if (switchStartMs_ != 0) {  // a reload just finished — record its latency
-                lastSwitchMs_ = nowMs - switchStartMs_;
-                switchStartMs_ = 0;
-            }
-        }
+    if (!ready_) {
+        advanceHealthProbe(nowMs);  // non-blocking GET /health, spread across ticks
     }
 }
 
@@ -76,18 +72,19 @@ void LlamaProcess::restart(std::uint64_t nowMs) {
     }
     paused_ = false;
     ready_ = false;
-    switchStartMs_ = nowMs;  // start the unload→reload latency timer
+    resetHealthProbe(nowMs);  // any in-flight probe targets the dying server
+    switchStartMs_ = nowMs;   // start the unload→reload latency timer
     lastError_ = "reloading";
 }
 
 void LlamaProcess::stop(std::uint64_t nowMs) {
-    (void)nowMs;
     if (pid_ > 0) {
         ::kill(pid_, SIGTERM);
         restarting_ = true;  // an intentional exit, not a crash
     }
     paused_ = true;
     ready_ = false;
+    resetHealthProbe(nowMs);
     switchStartMs_ = 0;  // not reloading — staying down
     lastError_ = "unloaded";
 }
@@ -168,11 +165,13 @@ void LlamaProcess::reapIfExited(std::uint64_t nowMs) {
         if (errno == ECHILD) {
             pid_ = -1;
             ready_ = false;
+            resetHealthProbe(nowMs);
         }
         return;
     }
     pid_ = -1;
     ready_ = false;
+    resetHealthProbe(nowMs);  // the server we were probing is gone
     if (restarting_) {
         // An operator switch/restart/unload SIGTERMed it — not a crash. Respawn
         // promptly (no crash backoff); keep the "reloading"/"unloaded" message.
@@ -218,13 +217,34 @@ std::size_t LlamaProcess::residentKb() const {
     return static_cast<std::size_t>(resident) * static_cast<std::size_t>(pageKb);
 }
 
-bool LlamaProcess::probeHealth() {
-    // Bounded, non-blocking GET /health. Brief (<~60ms worst case) and only while
-    // the model is loading; once ready we stop probing. A fully-async probe is a
-    // later refinement; this keeps the loop responsive without a state machine.
+void LlamaProcess::collectPollFds(std::vector<int>& out) const {
+    // While a probe is in flight, hand its socket to the host poll() set so the loop
+    // wakes on the /health response (or a refused connection's POLLERR, which poll
+    // reports on any watched fd) instead of waiting out the ~100 ms tick timeout —
+    // the loop reads nothing here, it just uses the fd as a wakeup hint. Connect
+    // completion on loopback is instant, so watching POLLIN is enough.
+    if (healthFd_ >= 0) {
+        out.push_back(healthFd_);
+    }
+}
+
+void LlamaProcess::resetHealthProbe(std::uint64_t nowMs) {
+    if (healthFd_ >= 0) {
+        ::close(healthFd_);
+        healthFd_ = -1;
+    }
+    probe_ = Probe::Idle;
+    nextHealthMs_ = nowMs + kHealthIntervalMs;  // throttle the next attempt
+}
+
+void LlamaProcess::beginHealthProbe(std::uint64_t nowMs) {
+    // Open a non-blocking socket and start connect(); the state machine in
+    // advanceHealthProbe() carries it through send → read across later ticks.
+    probeDeadlineMs_ = nowMs + kHealthProbeTimeoutMs;  // backstop for a wedged attempt
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        return false;
+        nextHealthMs_ = nowMs + kHealthIntervalMs;
+        return;
     }
     int flags = ::fcntl(fd, F_GETFL, 0);
     ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -238,47 +258,77 @@ bool LlamaProcess::probeHealth() {
     const char* hostNumeric = (cfg_.host == "localhost") ? "127.0.0.1" : cfg_.host.c_str();
     if (::inet_pton(AF_INET, hostNumeric, &addr.sin_addr) != 1) {
         ::close(fd);
-        return false;
+        nextHealthMs_ = nowMs + kHealthIntervalMs;
+        return;
     }
-
-    bool ok = false;
-    auto cleanup = [&]() {
-        ::close(fd);
-        return ok;
-    };
-
     if (::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0 &&
         errno != EINPROGRESS) {
-        return cleanup();
+        ::close(fd);
+        nextHealthMs_ = nowMs + kHealthIntervalMs;
+        return;
+    }
+    healthFd_ = fd;
+    probe_ = Probe::Connecting;
+}
+
+void LlamaProcess::advanceHealthProbe(std::uint64_t nowMs) {
+    // Fully-async GET /health (§18): each step polls with a 0 ms timeout so tick()
+    // never blocks. Only runs while !ready_ (the caller's guard); once a model is up
+    // we stop probing entirely.
+    if (healthFd_ < 0) {
+        if (nowMs >= nextHealthMs_) {
+            beginHealthProbe(nowMs);  // start a fresh attempt; connect progresses next tick
+        }
+        return;
+    }
+    if (nowMs >= probeDeadlineMs_) {
+        resetHealthProbe(nowMs);  // attempt wedged (half-open / no response) — retry later
+        return;
     }
 
-    pollfd pf{fd, POLLOUT, 0};
-    if (::poll(&pf, 1, 30) <= 0 || !(pf.revents & POLLOUT)) {
-        return cleanup();
-    }
-    int err = 0;
-    socklen_t len = sizeof(err);
-    ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
-    if (err != 0) {
-        return cleanup();
+    if (probe_ == Probe::Connecting) {
+        pollfd pf{healthFd_, POLLOUT, 0};
+        if (::poll(&pf, 1, 0) <= 0 || !(pf.revents & (POLLOUT | POLLERR | POLLHUP))) {
+            return;  // connect still pending — try next tick
+        }
+        int err = 0;
+        socklen_t len = sizeof(err);
+        ::getsockopt(healthFd_, SOL_SOCKET, SO_ERROR, &err, &len);
+        if (err != 0) {  // connection refused — server not accepting yet
+            resetHealthProbe(nowMs);
+            return;
+        }
+        std::string req = "GET /health HTTP/1.0\r\nHost: " + cfg_.host + "\r\n\r\n";
+        if (::send(healthFd_, req.data(), req.size(), MSG_NOSIGNAL) < 0) {
+            resetHealthProbe(nowMs);
+            return;
+        }
+        probe_ = Probe::Reading;
+        return;
     }
 
-    std::string req = "GET /health HTTP/1.0\r\nHost: " + cfg_.host + "\r\n\r\n";
-    if (::send(fd, req.data(), req.size(), MSG_NOSIGNAL) < 0) {
-        return cleanup();
+    if (probe_ == Probe::Reading) {
+        pollfd pf{healthFd_, POLLIN, 0};
+        if (::poll(&pf, 1, 0) <= 0 || !(pf.revents & (POLLIN | POLLERR | POLLHUP))) {
+            return;  // no response yet — try next tick
+        }
+        char buf[128];
+        ssize_t n = ::recv(healthFd_, buf, sizeof(buf) - 1, 0);
+        bool ok = false;
+        if (n > 0) {
+            buf[n] = '\0';
+            ok = std::strstr(buf, " 200") != nullptr;  // "HTTP/1.1 200 OK"
+        }
+        if (ok) {
+            ready_ = true;
+            lastError_.clear();
+            if (switchStartMs_ != 0) {  // a reload just finished — record its latency
+                lastSwitchMs_ = nowMs - switchStartMs_;
+                switchStartMs_ = 0;
+            }
+        }
+        resetHealthProbe(nowMs);  // close the fd; if !ok the next attempt retries
     }
-
-    pf.events = POLLIN;
-    if (::poll(&pf, 1, 30) <= 0 || !(pf.revents & POLLIN)) {
-        return cleanup();
-    }
-    char buf[128];
-    ssize_t n = ::recv(fd, buf, sizeof(buf) - 1, 0);
-    if (n > 0) {
-        buf[n] = '\0';
-        ok = std::strstr(buf, " 200") != nullptr;  // "HTTP/1.1 200 OK"
-    }
-    return cleanup();
 }
 
 }  // namespace villen::chat

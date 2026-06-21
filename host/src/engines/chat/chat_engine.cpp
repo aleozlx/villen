@@ -456,6 +456,11 @@ void ChatEngine::collectPollFds(std::vector<int>& out) {
     if (llama_) {
         llama_->collectFds(out);
     }
+    // The managed server's in-flight /health probe (§18): wake on its response so a
+    // (re)load flips ready() promptly instead of at the next tick timeout.
+    if (process_) {
+        process_->collectPollFds(out);
+    }
 }
 
 std::string ChatEngine::statusLine() const {

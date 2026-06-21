@@ -40,8 +40,15 @@ class LlamaProcess {
     LlamaProcess& operator=(const LlamaProcess&) = delete;
 
     // Per-tick lifecycle (non-blocking): spawn if down, reap if exited (and
-    // restart with backoff), probe /health to flip ready(). Call from onTick.
+    // restart with backoff), advance the /health probe to flip ready(). Call from
+    // onTick.
     void tick(std::uint64_t nowMs);
+
+    // Health-probe socket(s) for the host poll() set: while a freshly (re)spawned
+    // server is loading, the in-flight GET /health fd is watched so the loop wakes
+    // on the response (or a refused connection) instead of waiting out the tick
+    // timeout — the §18 fully-async probe. Empty once ready() (probing stops).
+    void collectPollFds(std::vector<int>& out) const;
 
     // --- operator controls (admin console §9, step 6) ------------------------
     // All non-blocking and idiomatic to the one loop: each only SIGTERMs the
@@ -75,21 +82,32 @@ class LlamaProcess {
     const std::string& lastError() const { return lastError_; }
     std::size_t residentKb() const;  // child RSS from /proc; 0 if unavailable
 
+    // The non-blocking GET /health state machine (§18): a probe spans ticks
+    // (connect → send → read), each step a poll(timeout=0), so tick() never blocks.
+    enum class Probe : std::uint8_t { Idle, Connecting, Reading };
+
  private:
     LlamaSpawnConfig cfg_;
     pid_t pid_ = -1;
     bool ready_ = false;
-    bool paused_ = false;              // stop()ped: don't respawn until told to
-    bool restarting_ = false;          // the next reap is intentional, not a crash
-    std::uint64_t nextSpawnMs_ = 0;    // backoff gate after a death
-    std::uint64_t nextHealthMs_ = 0;   // throttle for health probes
-    std::uint64_t switchStartMs_ = 0;  // reload timer start; 0 = not switching
-    std::uint64_t lastSwitchMs_ = 0;   // duration of the last completed reload
+    bool paused_ = false;                // stop()ped: don't respawn until told to
+    bool restarting_ = false;            // the next reap is intentional, not a crash
+    std::uint64_t nextSpawnMs_ = 0;      // backoff gate after a death
+    std::uint64_t nextHealthMs_ = 0;     // throttle between probe attempts
+    std::uint64_t switchStartMs_ = 0;    // reload timer start; 0 = not switching
+    std::uint64_t lastSwitchMs_ = 0;     // duration of the last completed reload
+    int healthFd_ = -1;                  // in-flight probe socket; -1 = no probe open
+    Probe probe_ = Probe::Idle;          // probe state machine position
+    std::uint64_t probeDeadlineMs_ = 0;  // abort a wedged attempt by this time
     std::string lastError_;
 
     void spawn(std::uint64_t nowMs);
     void reapIfExited(std::uint64_t nowMs);
-    bool probeHealth();  // bounded non-blocking GET /health; true once 200 seen
+    // Health probe: advance() drives the state machine each tick; begin() opens the
+    // socket and starts a non-blocking connect; reset() closes any in-flight fd.
+    void advanceHealthProbe(std::uint64_t nowMs);
+    void beginHealthProbe(std::uint64_t nowMs);
+    void resetHealthProbe(std::uint64_t nowMs);
 };
 
 }  // namespace villen::chat
