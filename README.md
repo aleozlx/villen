@@ -116,6 +116,7 @@ APU via RADV Vulkan** (never software-GL `llvmpipe`), and a Step 7 throughput sp
   16 GB unified memory free, with the device awake and under load.
 - 🐌➡️🏎️ **Vulkan ≈ 2.9× CPU:** 14.4 vs **4.96 tok/s** (`-ngl 0`) on Qwen — the APU
   offload earns its keep.
+- 📈 **The `--parallel` trade-off traces a clean [Pareto curve](spike/chat-bench/README.md#concurrency-pareto-frontier)** — per-stream speed vs system throughput, with the sweet spot at 2 slots.
 
 Full table, method, and the CPU/concurrency breakdown:
 [`spike/chat-bench/README.md`](spike/chat-bench/README.md).

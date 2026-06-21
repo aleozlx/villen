@@ -80,6 +80,28 @@ Raw per-stream JSON and the auto-generated tables live in `results-vulkan.{json,
 `results-cpu.{json,md}` (git-ignored); the per-cell server logs (with the RADV device
 banner) are under `bench-logs/`.
 
+### Concurrency Pareto frontier
+
+![Per-stream decode vs aggregate throughput on the Deck APU, for Qwen2.5-7B, Llama-3.1-8B and Mistral-7B v0.3 as --parallel goes 1, 2, 4 — per-stream speed falls as aggregate throughput rises; Mistral is Pareto-dominant; the elbow is at 2 slots](concurrency-pareto.svg)
+
+The `--parallel` slot count is a dial on a **Pareto frontier** between single-user
+responsiveness (per-stream decode, y) and system capacity (aggregate throughput, x) —
+both "up = good", so the curve slopes *down* to the right. Each point is non-dominated:
+par=1 is the most responsive, par=4 the highest capacity, par=2 in between.
+
+Read the shape, not just the slope: the curves stay high through **2 slots** then fall
+off faster toward 4 — i.e. the *first* slot of concurrency is nearly free (1→2 barely
+dents per-stream speed) while 2→4 costs more and roughly doubles TTFT again. So **2 is
+the sweet spot** for a Deck serving a few friends; 4 only under sustained simultaneous
+load. Mistral's curve sits above-and-right of the other two (Pareto-dominant on
+*throughput* here — a separate question from output quality, which this spike doesn't
+measure).
+
+> Note on orientation: the textbook "knee" is usually drawn as *latency vs throughput*
+> and bends **up** (latency explodes near saturation). This is the same data with
+> per-stream **speed** (≈ 1/latency) on y, which mirrors it top-to-bottom — plot TTFT on
+> y instead and you'd get the familiar upward knee (0.75 → 1.1 → 1.9 s).
+
 ## Why benchmark `llama-server` directly
 
 The host is a thin **non-blocking proxy** (`LlamaClient` pumps bytes; `LlamaProcess`
