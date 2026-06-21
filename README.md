@@ -90,7 +90,7 @@ selection method.
 
 | Engine | What it is | Axis it stresses |
 |---|---|---|
-| [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU compute, per-connection privacy, binary transport |
+| [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
 | [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
 | [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
 | [`canvas`](docs/DESIGN-canvas.md) | a **shared collaborative drawing wall** (iPad-native) | many writers on one shared state |

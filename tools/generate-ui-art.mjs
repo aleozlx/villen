@@ -7,9 +7,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 const out = new URL("../rc/ui/", import.meta.url);
 mkdirSync(out, { recursive: true });
 
-const shell = (title, body, active = false) => `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="${active ? "#15181D" : "#F0A34A"}">
-  <title id="title">${title}</title>
+// Escape text destined for XML — a future title containing & < > " or ' would
+// otherwise produce an invalid SVG.
+const xmlEscape = (s) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c]));
+
+// `id` is a per-file slug so the <title>/aria-labelledby ids stay unique when
+// several icons are inlined into one document (and an active variant never reuses
+// its base icon's id). Internal defs ids (e.g. gradients) follow the same rule by
+// prefixing with the icon name.
+const shell = (id, title, body, active = false) => `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="${id}-title" color="${active ? "#15181D" : "#F0A34A"}">
+  <title id="${id}-title">${xmlEscape(title)}</title>
   <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
   ${active ? '<circle cx="32" cy="32" r="29" fill="#E2603B"/>' : ""}
   ${body}
@@ -63,7 +72,7 @@ const icons = {
   dilate: ["Dilate operator", '<g class="s"><path d="M32 13l19 19-19 19-19-19z"/><path d="M32 19v26M19 32h26"/></g>'],
   open: ["Open morphology operator", '<g class="s"><path d="M16 32a16 16 0 0 1 28-11"/><path d="M48 19v10H38"/><path d="M48 32a16 16 0 0 1-28 11"/><path d="M16 45V35h10"/></g>'],
   close: ["Close morphology operator", '<g class="s"><path d="M48 32a16 16 0 0 0-28-11"/><path d="M16 19v10h10"/><path d="M16 32a16 16 0 0 0 28 11"/><path d="M48 45V35H38"/></g>'],
-  gradient: ["Gradient operator", '<defs><linearGradient id="g" x1="0" x2="1"><stop stop-color="#15181D"/><stop offset="1" stop-color="#F0A34A"/></linearGradient></defs><rect x="12" y="18" width="40" height="28" rx="4" fill="url(#g)"/><path class="s" d="M12 52h40"/>'],
+  gradient: ["Gradient operator", '<defs><linearGradient id="gradient-fill" x1="0" x2="1"><stop stop-color="#15181D"/><stop offset="1" stop-color="#F0A34A"/></linearGradient></defs><rect x="12" y="18" width="40" height="28" rx="4" fill="url(#gradient-fill)"/><path class="s" d="M12 52h40"/>'],
   "top-hat": ["Top-hat morphology operator", '<g class="s"><path d="M19 27V17h26v10M14 29h36v8H14zM24 37v10h16V37"/></g>'],
 
   // Chat controls and badges ------------------------------------------------
@@ -88,11 +97,11 @@ const icons = {
 };
 
 for (const [name, [title, body]] of Object.entries(icons)) {
-  writeFileSync(new URL(`${name}.svg`, out), shell(title, body));
+  writeFileSync(new URL(`${name}.svg`, out), shell(name, title, body));
 }
 
 // Launcher tiles get a second, clearly active/inverted state for selected tiles.
 for (const name of Object.keys(icons).filter((name) => name.startsWith("engine-"))) {
   const [title, body] = icons[name];
-  writeFileSync(new URL(`${name}-active.svg`, out), shell(`${title} active`, body, true));
+  writeFileSync(new URL(`${name}-active.svg`, out), shell(`${name}-active`, `${title} active`, body, true));
 }

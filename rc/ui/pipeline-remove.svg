@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#F0A34A">
-  <title id="title">Remove pipeline operator</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="pipeline-remove-title" color="#F0A34A">
+  <title id="pipeline-remove-title">Remove pipeline operator</title>
   <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
   
   <g class="s"><circle cx="16" cy="32" r="6"/><circle cx="32" cy="32" r="6"/><path d="M22 32h4M38 32h16M45 32h18"/></g>

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#F0A34A">
-  <title id="title">Private on-device processing</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="privacy-lock-title" color="#F0A34A">
+  <title id="privacy-lock-title">Private on-device processing</title>
   <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
   
   <g class="s"><rect x="13" y="28" width="38" height="25" rx="4"/><path d="M21 28v-7a11 11 0 0 1 22 0v7"/></g><circle class="a" cx="32" cy="40" r="3"/>

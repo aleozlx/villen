@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#F0A34A">
-  <title id="title">Synthesizer</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="jam-synth-title" color="#F0A34A">
+  <title id="jam-synth-title">Synthesizer</title>
   <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
   
   <g class="s"><rect x="10" y="21" width="44" height="25" rx="4"/><path d="M18 21v14M25 21v14M32 21v14M39 21v14M46 21v14"/><circle cx="18" cy="40" r="2"/><circle cx="26" cy="40" r="2"/></g>

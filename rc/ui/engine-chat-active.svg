@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#15181D">
-  <title id="title">Local chat active</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="engine-chat-active-title" color="#15181D">
+  <title id="engine-chat-active-title">Local chat active</title>
   <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
   <circle cx="32" cy="32" r="29" fill="#E2603B"/>
   <g class="s"><path d="M10 15h44v28H27L16 51v-8h-6z"/><path d="M21 29h1M31 29h1M41 29h1"/></g><path class="a" d="M47 10l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/>

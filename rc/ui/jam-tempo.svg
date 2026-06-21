@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#F0A34A">
-  <title id="title">Metronome tempo</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="jam-tempo-title" color="#F0A34A">
+  <title id="jam-tempo-title">Metronome tempo</title>
   <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
   
   <g class="s"><path d="M19 52h26L38 13H26zM32 23l7 18"/><path d="M14 52h36"/></g><circle class="a" cx="40" cy="42" r="3"/>

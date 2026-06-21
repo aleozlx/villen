@@ -150,16 +150,16 @@ struct IEngineFactory {
   virtual ~IEngineFactory() = default;
   virtual std::unique_ptr<IEngine> create() = 0;
   virtual const char* name()      = 0;   // shown in the launcher
-  virtual const char* clientDir() = 0;   // this game's client assets to serve
+  virtual const char* clientDir() = 0;   // this engine's client assets to serve
 };
 
 // The host registers several engines; the launcher activates ONE at a time.
 struct Config {
   std::vector<std::unique_ptr<IEngineFactory>> engines;   // the launcher's menu
-  std::string startGame = "";   // optional: boot straight into one (kiosk / --engine)
+  std::string startEngine = "";   // optional: boot straight into one (kiosk / --engine)
 };
 
-void run(Config);   // boots the launcher; operator picks a game (DESIGN-admin-shell)
+void run(Config);   // boots the launcher; operator picks an engine (DESIGN-admin-shell)
 
 }  // namespace villen
 ```
