@@ -178,8 +178,9 @@ int main(int argc, char** argv) {
         if (g_cycleModel) {
             g_cycleModel = 0;
             // Chat-specific operator action; other engines have no model to cycle.
-            if (auto* chat = dynamic_cast<villen::ChatEngine*>(host.active()))
+            if (auto* chat = dynamic_cast<villen::ChatEngine*>(host.active())) {
                 chat->cycleModel();
+            }
         }
         // Fold the active engine's fds (a streaming inference socket) into poll so
         // an inbound token ends the 100ms block at once and the tick drains it —

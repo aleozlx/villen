@@ -183,8 +183,11 @@ void WsServer::poll(int timeoutMs, const std::vector<int>& extraReadFds) {
     // Foreign fds (an engine's inference socket): watched only so their readiness
     // ends the block early. They sit after the conn fds, past `order.size()`, so
     // the per-conn loop below never touches them — the owner reads them in onTick.
-    for (int fd : extraReadFds)
-        if (fd >= 0) pfds.push_back({fd, POLLIN, 0});
+    for (int fd : extraReadFds) {
+        if (fd >= 0) {
+            pfds.push_back({fd, POLLIN, 0});
+        }
+    }
 
     int n = ::poll(pfds.data(), pfds.size(), timeoutMs);
     if (n <= 0) return;

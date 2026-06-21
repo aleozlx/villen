@@ -52,7 +52,9 @@ void Host::tick(std::uint64_t nowMs) {
 }
 
 void Host::collectPollFds(std::vector<int>& out) {
-    if (active_) active_->collectPollFds(out);
+    if (active_) {
+        active_->collectPollFds(out);
+    }
 }
 
 void Host::announce(ConnId id) { ws_.send(id, envelope::engineAnnounce(activeName())); }
