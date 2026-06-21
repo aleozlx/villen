@@ -45,9 +45,9 @@ evict** (treat the warm number as a lower bound on the gap, not as "the SD card 
 ./diskbench.py --path ~ --size-mb 512   # real disk — shows the cold vs warm gap
 ```
 
-(`--self-test` uses `/tmp`, which is usually `tmpfs` = RAM, so cold ≈ warm there — it
-proves the mechanics, not a disk. Point `--path` at a real filesystem to see eviction
-actually bite.)
+(`--self-test` writes to a private `mkdtemp` dir, usually under `/tmp` = `tmpfs` = RAM,
+so cold ≈ warm there — it proves the mechanics, not a disk. Point `--path` at a real
+filesystem to see eviction actually bite.)
 
 ## Run on the Deck (deferred)
 

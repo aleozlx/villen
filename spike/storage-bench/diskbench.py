@@ -37,7 +37,10 @@
 
 import argparse
 import os
+import shutil
+import stat
 import sys
+import tempfile
 import time
 
 MIB = 1024 * 1024
@@ -80,12 +83,18 @@ def backing_device(path):
 def make_test_file(path, size_bytes):
     """Write a non-sparse, low-compressibility file of size_bytes and fsync it.
     Reuses an existing file of the right size. Returns (path, write_seconds)."""
-    if os.path.exists(path) and os.path.getsize(path) == size_bytes:
+    try:
+        st = os.lstat(path)  # lstat, not stat: don't follow a symlink at this path
+    except OSError:
+        st = None
+    if st is not None and stat.S_ISREG(st.st_mode) and st.st_size == size_bytes:
         return path, None
     block = os.urandom(MIB)  # one random MiB, reused — incompressible within a block
     written = 0
     t0 = time.perf_counter()
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    # O_NOFOLLOW: refuse to open (and O_TRUNC-truncate) a symlink planted at this
+    # path in a shared dir — the classic insecure-temp-file / symlink attack.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o644)
     try:
         while written < size_bytes:
             n = min(len(block), size_bytes - written)
@@ -200,11 +209,15 @@ def main():
     if args.gguf_gb <= 0:
         ap.error("--gguf-gb must be greater than 0")
 
+    selftest_dir = None
     if args.self_test:
-        args.path = ["/tmp"]
+        # Private 0700 dir with a random name — not a predictable /tmp path an
+        # attacker could pre-plant a symlink at (insecure-temp-file hazard).
+        selftest_dir = tempfile.mkdtemp(prefix="diskbench-selftest-")
+        args.path = [selftest_dir]
         args.size_mb = 64
         args.reps = 2
-        print("storage-bench SELF-TEST (/tmp, 64 MiB) — verifying harness only\n")
+        print(f"storage-bench SELF-TEST ({selftest_dir}, 64 MiB) — verifying harness only\n")
 
     files = ([args.file] if args.file else []) + list(args.also)
     if not args.path and not files:
@@ -252,8 +265,10 @@ def main():
                   f"~{saved:.0f}s ({slow['proj_load_s']:.0f}s → {fast['proj_load_s']:.0f}s cold).")
 
     if args.self_test:
-        print("\nSELF-TEST OK — harness runs. (Numbers are /tmp, not a real disk "
-              "comparison.) Run on the Deck with real --path/--file for the verdict.")
+        print("\nSELF-TEST OK — harness runs. (Numbers are a temp dir, not a real "
+              "disk comparison.) Run on the Deck with real --path/--file for the verdict.")
+        if selftest_dir:
+            shutil.rmtree(selftest_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
