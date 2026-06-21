@@ -59,6 +59,13 @@ class IEngine {
     // not parsed it (beyond ruling out the join/seat envelope).
     virtual void onMessage(Room&, ConnId, SeatId, std::string_view payload) = 0;
 
+    // An opaque *binary* frame — the media path (DESIGN-filter §5.1). Text is the
+    // control/envelope channel (onMessage); binary carries high-rate media (a
+    // JPEG camera frame) for engines that want it. Default no-op: text-only
+    // engines (chess) never see binary, so the interface grows without
+    // disturbing them — filter is the second engine firming this up (framework §1).
+    virtual void onBinary(Room&, ConnId, SeatId, std::string_view /*bytes*/) {}
+
     // Real-time engines advance the world here; turn-based engines don't override
     // it (framework §5.1). `nowMs` is a monotonic millisecond clock.
     virtual void onTick(Room&, std::uint64_t /*nowMs*/) {}

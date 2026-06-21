@@ -186,6 +186,40 @@ window + GL + imgui up; entering loop
   `ss -tn | grep <port>` shows established peers; `ss -ltn | grep <port>`
   confirms it's listening on `0.0.0.0`.
 
+### 5.1 The camera needs a secure context (HTTPS) — the `filter` engine
+
+Browsers only expose `getUserMedia` (camera/mic) on a **secure context**: HTTPS,
+or `localhost`. A phone on `http://<deck-ip>:9002` is plain HTTP to a LAN IP, so the
+camera API is *absent* and the filter client falls back to its synthetic test
+pattern (DESIGN-filter §10.2). The host doesn't do TLS yet (deferred, §16), so for
+on-device testing put a secure front-end in front of it. Cheapest first:
+
+1. **LAN-only self-signed TLS proxy — works on any phone (incl. iOS) and keeps the
+   camera bytes on the LAN.** The Deck already ships `socat` + `openssl`. Terminate
+   TLS on a side port and byte-forward to villen's port (so HTTP *and* WebSocket
+   pass through unchanged):
+   ```bash
+   IP=$(ip route get 1 | awk '{print $7; exit}')
+   openssl req -x509 -newkey rsa:2048 -nodes -days 825 -keyout k.pem -out c.pem \
+     -subj "/CN=$IP" -addext "subjectAltName=IP:$IP"
+   cat c.pem k.pem > villen-tls.pem
+   socat OPENSSL-LISTEN:8443,reuseaddr,fork,cert=villen-tls.pem,verify=0 \
+     TCP:127.0.0.1:9002
+   ```
+   On the phone open `https://<deck-ip>:8443`, accept the one-time self-signed cert
+   warning → secure context → the camera works. `tools/tls-proxy.sh` is exactly this
+   (derives the IP, caches the cert); run it alongside villen. **Gotcha:** if your
+   launcher `export`s `LD_LIBRARY_PATH` for a bundled `llama-server` (the chat
+   engine), start the proxy *before* that export — or socat may pick up a shadowed
+   `libssl`/`libcrypto`. The client detects the insecure context and links straight
+   to the `:8443` URL (the port is the `TLS_PROXY_PORT` convention in
+   `client/filter/filter.js`).
+2. **Chrome insecure-origin flag (Android only).**
+   `chrome://flags/#unsafely-treat-insecure-origin-as-secure` → add
+   `http://<deck-ip>:9002` → **Enabled** → relaunch Chrome. No iOS equivalent.
+3. **Real TLS** (a domain + Let's Encrypt, or a tailnet cert) — the eventual answer,
+   deferred to DESIGN-filter §16.
+
 ---
 
 ## 6. TL;DR checklist

@@ -25,6 +25,10 @@ public:
     struct Callbacks {
         std::function<void(ConnId)> onOpen;
         std::function<void(ConnId, std::string_view)> onMessage;  // one text frame
+        // One binary frame. The player protocol is text (chess); media engines
+        // (filter, §5.1) route their opaque JPEG frames here. Unset by default,
+        // so binary frames are simply ignored for engines that don't want them.
+        std::function<void(ConnId, std::string_view)> onBinary;
         std::function<void(ConnId)> onClose;
     };
 
@@ -57,6 +61,10 @@ public:
     // Queue a UTF-8 text frame to one connection / all open connections.
     void send(ConnId id, std::string_view text);
     void broadcast(std::string_view text);
+
+    // Queue a binary frame to one connection (the media path, §5.1). There is no
+    // binary broadcast: media is per-connection and must never broadcast (§10.1).
+    void sendBinary(ConnId id, std::string_view bytes);
 
     void close(ConnId id);
 

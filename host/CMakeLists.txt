@@ -14,22 +14,46 @@ add_executable(villen
     src/room.cpp
     src/host.cpp
     src/engines/chess/chess_engine.cpp
+    src/engines/filter/filter_engine.cpp
+    src/engines/filter/stb_impl.cpp
     src/engines/chat/chat_engine.cpp
     src/llama_client.cpp
     src/llama_process.cpp
 )
 # src/ on the include path so engines under src/engines/<name>/ can include the
-# framework headers (engine.hpp, room.hpp, …) by their plain names.
+# framework headers (engine.hpp, room.hpp, …) by their plain names; third_party
+# carries the nlohmann + stb single-headers (filter's JPEG codec, DESIGN-filter §12).
 target_include_directories(villen PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(villen PRIVATE villen::engine villen::chat)
+# villen::filter is the pure CPU morphology reference the engine runs (and the
+# APU backend is validated against, §4.3); villen::chat is the pure chat core.
+target_link_libraries(villen PRIVATE villen::engine villen::filter villen::chat)
 target_compile_features(villen PRIVATE cxx_std_17)
 
 # Dev convenience: serve the browser client straight from the source tree unless
 # overridden with --client-dir at runtime.
 target_compile_definitions(villen PRIVATE
     VILLEN_DEFAULT_CLIENT_DIR="${CMAKE_SOURCE_DIR}/client")
+
+# --- filter GPU backend: surfaceless EGL + GLES 3.1 compute (DESIGN-filter §4) -
+# The APU acceleration of the CPU reference. Guarded exactly like the admin UI
+# (§12): absent EGL/GLES -> the host still builds and filter runs on the CPU
+# reference. CI (ubuntu, no render node) just compiles the engine; the GPU path
+# is exercised on real hardware (this PC's iGPU, the Deck's radeonsi).
+find_library(EGL_LIB EGL)
+find_library(GLESV2_LIB GLESv2)
+find_path(EGL_INCLUDE_DIR EGL/egl.h)
+if(EGL_LIB AND GLESV2_LIB AND EGL_INCLUDE_DIR)
+    target_sources(villen PRIVATE src/engines/filter/gpu_backend.cpp)
+    target_include_directories(villen PRIVATE ${EGL_INCLUDE_DIR})
+    target_link_libraries(villen PRIVATE ${EGL_LIB} ${GLESV2_LIB})
+    target_compile_definitions(villen PRIVATE VILLEN_FILTER_GPU)
+    message(STATUS "villen: filter GPU backend enabled (EGL + GLESv2)")
+else()
+    message(STATUS
+        "villen: EGL/GLESv2 not found — filter runs on the CPU reference only")
+endif()
 
 # --- In-process Dear ImGui admin UI (DESIGN §8, step 7) ----------------------
 find_package(SDL2 QUIET)

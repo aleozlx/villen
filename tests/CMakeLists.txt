@@ -19,6 +19,13 @@ target_link_libraries(engine_tests PRIVATE villen::engine doctest::doctest)
 
 add_test(NAME engine_tests COMMAND engine_tests)
 
+# The pure `filter` morphology reference (DESIGN-filter.md §13 step 1): same GPU-
+# free, always-on CI discipline as the chess engine tests above.
+add_executable(filter_tests filter_tests.cpp)
+target_link_libraries(filter_tests PRIVATE villen::filter doctest::doctest)
+
+add_test(NAME filter_tests COMMAND filter_tests)
+
 # The chat pure core (DESIGN-chat.md §14 step 1): conversation state +
 # per-model templating, asserted with exact rendered prompts and stop tokens —
 # the deterministic part, run in headless LLM-free/GPU-free CI (§13, acceptance §1).

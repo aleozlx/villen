@@ -393,7 +393,9 @@ void WsServer::parseFrames(ConnId id) {
             int op = c.fragmentOpcode;
             c.fragmentOpcode = 0;
             if (op == kOpText && cb_.onMessage) cb_.onMessage(id, msg);
-            // binary frames are not part of the player protocol; ignored.
+            // Binary frames carry media for engines that opt in (filter, §5.1);
+            // engines that don't set onBinary simply ignore them.
+            else if (op == kOpBinary && cb_.onBinary) cb_.onBinary(id, msg);
         }
     }
 }
@@ -439,6 +441,12 @@ void WsServer::send(ConnId id, std::string_view text) {
 void WsServer::broadcast(std::string_view text) {
     for (auto& [id, c] : conns_)
         if (c.handshakeDone && !c.closing) queueFrame(c, kOpText, text);
+}
+
+void WsServer::sendBinary(ConnId id, std::string_view bytes) {
+    auto it = conns_.find(id);
+    if (it == conns_.end() || !it->second.handshakeDone) return;
+    queueFrame(it->second, kOpBinary, bytes);  // queueFrame never masks srv->cli
 }
 
 void WsServer::close(ConnId id) {

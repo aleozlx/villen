@@ -3,6 +3,7 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -340,6 +341,12 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
         ws.poll(0);                 // drain the network on the SAME thread as the UI (§5)
         host.tick(SDL_GetTicks());  // advance real-time engines (onTick) every frame —
                                     // SDL_GetTicks is a monotonic ms clock since init
+
+        // A real-time engine may have made its own GL context current this tick
+        // (filter's surfaceless-EGL compute context, §6). Re-bind the admin SDL
+        // context before ImGui renders, so the two contexts share one thread
+        // cleanly.
+        SDL_GL_MakeCurrent(win, gl);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();

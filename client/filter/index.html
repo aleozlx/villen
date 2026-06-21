@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Villen — filter</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font: 15px/1.4 system-ui, sans-serif; background: #0d0d10; color: #e6e6e6;
+           display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
+    h1 { font-size: 18px; font-weight: 600; margin: 4px 0; letter-spacing: 0.5px; }
+    .status { font-size: 13px; color: #8aa; min-height: 1.2em; }
+    .stage { position: relative; }
+    /* The visible canvas shows ONLY the host's processed output (§9.4). */
+    #out { background: #000; border-radius: 8px; max-width: 95vw; height: auto;
+           image-rendering: auto; box-shadow: 0 4px 24px #0008; }
+    /* Self-preview is a tiny opt-in inset, off by default. */
+    #self { position: absolute; right: 8px; bottom: 8px; width: 96px; border-radius: 4px;
+            border: 1px solid #444; opacity: 0.85; display: none; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; }
+    button, label.toggle { background: #1c1c22; color: #ddd; border: 1px solid #333;
+            border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+    button:hover { background: #26262e; }
+    .stats { font: 12px/1.4 ui-monospace, monospace; color: #789; }
+    .note { max-width: 520px; text-align: center; font-size: 13px; color: #c97; }
+    a { color: #6af; }
+  </style>
+</head>
+<body>
+  <h1>Villen · filter</h1>
+  <div id="status" class="status">connecting…</div>
+
+  <div class="stage">
+    <canvas id="out" width="320" height="240"></canvas>
+    <video id="self" autoplay playsinline muted></video>
+  </div>
+
+  <div class="row">
+    <button data-preset="gradient">Gradient</button>
+    <button data-preset="open">Open</button>
+    <button data-preset="edge">Edge + threshold</button>
+  </div>
+  <div class="row">
+    <label class="toggle"><input type="checkbox" id="selfToggle" /> self-preview</label>
+    <label class="toggle"><input type="checkbox" id="testToggle" /> test pattern (no camera)</label>
+  </div>
+
+  <div id="stats" class="stats"></div>
+  <div id="note" class="note"></div>
+
+  <p class="note">
+    Your camera is processed on the host's APU; only the result is shown here.
+    The raw video never leaves the LAN, is never broadcast, and is never stored.
+  </p>
+
+  <script type="module" src="/filter.js"></script>
+</body>
+</html>

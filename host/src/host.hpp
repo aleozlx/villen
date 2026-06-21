@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "engine.hpp"
@@ -26,7 +27,12 @@ namespace villen {
 
 class Host {
  public:
-    Host(net::WsServer& ws, std::vector<std::unique_ptr<IEngineFactory>> engines);
+    // `clientRoot` is the base static dir (from --client-dir). Each engine serves
+    // its own client out of `clientRoot/<engine.clientDir()>` while active; the
+    // launcher (no engine) serves `clientRoot` itself (admin-shell §5: the host
+    // serves the active engine's own client, no in-browser router).
+    Host(net::WsServer& ws, std::vector<std::unique_ptr<IEngineFactory>> engines,
+         std::string clientRoot);
     ~Host();
 
     // The launcher menu.
@@ -54,6 +60,7 @@ class Host {
  private:
     net::WsServer& ws_;
     std::vector<std::unique_ptr<IEngineFactory>> engines_;
+    std::string clientRoot_;           // base static dir; engines serve subdirs of it
     std::unique_ptr<IEngine> active_;  // nullptr at the launcher
     std::unique_ptr<Room> room_;       // one Room per active engine
     std::size_t activeIndex_ = static_cast<std::size_t>(-1);
@@ -62,6 +69,7 @@ class Host {
     void announce(ConnId id);        // tell one client which engine is active
     void announceAll();              // ... and every connected client
     void installCallbacks();         // route ws -> active room (or announce-only)
+    void serveActiveClient();        // point the static root at the active engine's dir
 };
 
 }  // namespace villen

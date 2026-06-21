@@ -35,11 +35,15 @@ class Room {
     // --- driven by the host's ws callbacks (one thread, DESIGN §5) ---
     void onOpen(ConnId);
     void onMessage(ConnId, std::string_view);
+    void onBinary(ConnId, std::string_view);  // media frame -> engine (§5.1)
     void onClose(ConnId);
 
     // --- engine-facing handle (passed as Room& to IEngine methods) ---
     void send(ConnId, std::string_view bytes, Delivery = Delivery::Reliable);
     void broadcast(std::string_view bytes, Delivery = Delivery::Reliable);
+    // The processed media reply (§5.1). Per-connection only — there is no binary
+    // broadcast, by privacy design: a feed is answered privately (§10.1).
+    void sendBinary(ConnId, std::string_view bytes, Delivery = Delivery::Reliable);
     SeatId seatOf(ConnId) const;          // kNoSeat if spectator/unknown
     ConnId connOfSeat(SeatId) const;      // 0 if the seat is empty
     SeatId seatIndex(std::string_view name) const;  // kNoSeat if no such seat

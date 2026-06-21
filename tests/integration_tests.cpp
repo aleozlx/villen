@@ -52,7 +52,10 @@ struct ChessServer {
     ChessServer() {
         std::vector<std::unique_ptr<villen::IEngineFactory>> engines;
         engines.push_back(std::make_unique<villen::ChessFactory>());
-        host = std::make_unique<villen::Host>(ws, std::move(engines));
+        // Host now owns the HTTP static root per active engine (admin-shell §5);
+        // these tests drive the WebSocket protocol, not file serving, so any root
+        // string is fine — chess's clientDir() is "" so it never gets appended.
+        host = std::make_unique<villen::Host>(ws, std::move(engines), "client");
         REQUIRE(ws.listen(0));   // 0 -> OS picks a free port; port() reports it
         host->startEngine(0);    // chess is the only registered engine
         loop = std::thread([this] {
