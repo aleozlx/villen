@@ -190,7 +190,9 @@ as DESIGN §7 demands:
   use of the long-deferred *"route the Deck's native controls into a game seat"*
   (DESIGN §4 non-goal, §13 open question). The admin UI already reads the Deck
   gamepad via SDL (`admin_ui.cpp`); `snake` lets a local pad **be a player** instead
-  of only navigating the admin panel. Couch co-op + remote phones in one arena.
+  of only navigating the admin panel. Couch co-op + remote phones in one arena. (The shell
+hands the pad to the engine while a game is in session and runs touch-only itself —
+[`DESIGN-admin-shell.md`](DESIGN-admin-shell.md) §6.)
 
 Every source emits the same `{dir}` into the same per-player buffer; the engine never
 knows whether a turn came from a thumb-swipe, an arrow key, a Deck stick, or an AI.

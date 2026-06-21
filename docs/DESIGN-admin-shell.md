@@ -10,6 +10,8 @@
 
 **Status:** design / **coordination — settle before fanning out engine work.** Every
 engine's `drawAdmin()` plugs into this shell, so its contract (§8) must be fixed first.
+**Decided this revision:** **in-process** engine switching (§4), and a **touch/click-first**
+admin UI that hands the gamepad to the engine while a game is in session (§6).
 **Scope:** the top-level structure of the operator UI on the Deck and how it selects,
 runs, and tears down a single engine.
 **Audience:** the agent building the shell, **and** every agent building an engine (read
@@ -85,6 +87,10 @@ Exactly one `IEngine` is instantiated at any moment; the launcher is the state w
 
 ## 4. Lifecycle & host wiring (reconciling with `IEngine`)
 
+> **Decided: in-process switching** (not relaunch-per-engine, §10). On the Deck in Game
+> Mode a game doesn't restart *itself* — the **launcher hands off** to the engine within
+> the one process, and Home hands back. One binary, one loop, as everywhere else.
+
 The host owns the `WsServer`, a **nullable** `IEngine* active_`, and the `view_` state.
 
 ```cpp
@@ -137,20 +143,27 @@ chess/snake/canvas/jam broadcast, filter/chat are private).
 
 ---
 
-## 6. Input & navigation on the Deck (a real care-point)
+## 6. Input & navigation on the Deck (decided: touch-first)
 
-The shell is gamepad-navigable (`NavEnableGamepad`, already set
-[`admin_ui.cpp:183`](../host/src/admin_ui.cpp)): D-pad to move, **A** to launch, **B**/a
-Home button to go back. But there is a genuine clash to design around:
+The Steam Deck is touchscreen-first, and that **dissolves** the gamepad clash that would
+otherwise arise when an engine (snake) wants the pad as gameplay. The rule:
 
-> **When an engine consumes the gamepad as *gameplay* (snake), the operator's "Home"
-> button can't also be a gameplay button.** The admin nav and the engine's player input
-> would fight over the same pad.
+- **The shell and every admin panel are touch/click-driven.** ImGui is mouse-native
+  already, and the Deck touchscreen delivers pointer events to the SDL window as mouse
+  input under Gamescope — so "tap the button" *is* the interaction. Every control must be
+  **touch-reachable**; the shell does **not** rely on gamepad navigation for
+  reachability.
+- **Gamepad ownership is modal.** In the **launcher** (no engine running) the pad may
+  drive ImGui nav as a convenience. The moment an **engine is in session**, the shell
+  **turns ImGui gamepad-nav off** (`NavEnableGamepad`,
+  [`admin_ui.cpp:183`](../host/src/admin_ui.cpp)) and **hands the pad to the engine** —
+  snake's local players, etc. (the Deck-input-into-a-seat path, DESIGN §13). The shell's
+  only always-present control is a **touchscreen Home chip**, which never needs the pad,
+  so it cannot conflict.
 
-Options (decide in the shell, not per engine): reserve a **non-gameplay route home** —
-the Steam/Quick-Access overlay, a touchscreen-only on-screen **Home** chip the shell
-always draws, or a deliberate **chord** (e.g. hold Start) the engine never uses. The
-shell owns this; engines must not bind it (§8). Flagged as the top open question (§11).
+So there is no contest: **touch is the operator's surface; the gamepad is gameplay.**
+(Build check: confirm the Deck touchscreen reaches the SDL/ImGui window as pointer events
+under Gamescope — expected, but verify during the §7 system-info pass.)
 
 ---
 
@@ -175,7 +188,9 @@ So engines built in parallel stay consistent, fix this now:
    stats for that engine. It does **not** open a top-level/fullscreen window, draw a
    Home/Back button, or render the join URL/QR/connection count — **the shell owns all
    chrome and navigation.**
-2. An engine must **not** bind the shell's reserved "go Home" input (§6).
+2. **Home is a touchscreen chip the shell draws** — an engine draws no Home/Back control.
+   While an engine is in session the **gamepad is the engine's** to consume freely; the
+   shell runs touch-only then and will not compete for it (§6).
 3. An engine's **constructor acquires** its resources (GPU ctx, subprocess, state) and
    its **destructor fully releases** them; construct/destruct may happen many times in
    one process as the operator switches (§4).
@@ -204,14 +219,13 @@ So engines built in parallel stay consistent, fix this now:
 - **Multi-launch / a lobby running several engines at once.** Deferred (§3, roadmap §6):
   it's an OS/window-manager's job, not what the appliance needs. One active engine.
 - **Relaunch-the-binary-per-engine** (a supervisor wrapper picks the engine, each runs in
-  a fresh process). *Tempting* — it gives crash isolation and a guaranteed-clean slate
-  (no teardown bugs), and dovetails with the self-hotfix A/B wrapper
-  ([`DESIGN-self-hotfix.md`](DESIGN-self-hotfix.md)) and `chat`'s subprocess. **Not
-  chosen as primary** because it breaks the single-binary/single-loop in-process model
-  (the launcher itself would have to live in the wrapper, and switching means a process
-  restart + reconnect every time). Recorded as a real fork: if in-process teardown proves
-  leaky (a stuck EGL context, a zombie `llama-server`), relaunch-per-engine is the escape
-  hatch.
+  a fresh process). *Tempting* — crash isolation and a guaranteed-clean slate (no teardown
+  bugs), dovetailing with the self-hotfix A/B wrapper
+  ([`DESIGN-self-hotfix.md`](DESIGN-self-hotfix.md)) and `chat`'s subprocess. **Not chosen
+  (decided in-process, §4):** in Game Mode a game doesn't restart *itself* — the launcher
+  hands off within one process, and relaunch would mean a process restart + reconnect on
+  every switch. Recorded as the **escape hatch** only if in-process teardown proves leaky
+  (a stuck EGL context, a zombie `llama-server`).
 - **Keep `--engine` as the only selector, no launcher.** Bad Deck UX — no terminal in
   Game Mode. The launcher is the Game-Mode face; the flag stays for kiosk/headless/CI.
 - **Each engine draws its own window/chrome/home.** Inconsistent and causes the §6 nav
@@ -221,8 +235,10 @@ So engines built in parallel stay consistent, fix this now:
 
 ## 11. Open questions
 
-- **The gamepad Home affordance when an engine owns the pad** (snake) — overlay vs.
-  touchscreen Home chip vs. reserved chord (§6). The first thing to settle in build.
+- **Touchscreen → ImGui pointer events under Gamescope** — confirm the Deck's touch
+  reaches the SDL/ImGui window as mouse input (the touch-first model §6 assumes it);
+  verify in the system-info pass (§7). *(The earlier gamepad-Home clash is resolved by the
+  touch-first decision.)*
 - **Client-side multi-engine routing** — one landing page that swaps view modules vs. a
   redirect per engine; how an in-flight connection migrates vs. reconnects (§5).
 - **In-process teardown reliability** — verify `filter`'s EGL context and `chat`'s
