@@ -50,4 +50,26 @@ if(VILLEN_BUILD_HOST AND EXISTS "${CMAKE_SOURCE_DIR}/host/CMakeLists.txt")
     target_link_libraries(integration_tests PRIVATE
         villen::engine doctest::doctest Threads::Threads)
     add_test(NAME integration_tests COMMAND integration_tests)
+
+    # Chat end-to-end harness (DESIGN-chat.md §18): drives the REAL villen binary in
+    # spawn mode against the LLM-free fake llama-server over a player WebSocket — the
+    # §3.A transport (subprocess spawn + /health gate, SSE streaming, crash-restart,
+    # malformed-payload rejection) that the C++ unit tests can't reach. It needs the
+    # built `villen` target, a Python 3 interpreter, and the fake server; if any is
+    # missing the test is simply not registered (CI has all three). LLM-free and
+    # GPU-free, so it stays in the §13 "CI stays LLM-free" discipline.
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    set(VILLEN_FAKE_LLAMA "${CMAKE_SOURCE_DIR}/spike/chat-bench/fake_llama_server.py")
+    if(Python3_Interpreter_FOUND AND EXISTS "${VILLEN_FAKE_LLAMA}")
+        add_test(NAME chat_e2e COMMAND ${Python3_EXECUTABLE}
+            "${CMAKE_CURRENT_SOURCE_DIR}/chat_e2e.py"
+            --villen $<TARGET_FILE:villen>
+            --fake-llama "${VILLEN_FAKE_LLAMA}")
+        # Spawn + /health + crash-restart respawn (1s backoff) take real wall-clock;
+        # bound it generously so a slow CI runner doesn't false-fail.
+        set_tests_properties(chat_e2e PROPERTIES TIMEOUT 120)
+    else()
+        message(STATUS
+            "villen: skipping chat_e2e test (need Python3 + spike/chat-bench/fake_llama_server.py)")
+    endif()
 endif()
