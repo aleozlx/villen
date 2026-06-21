@@ -1,6 +1,6 @@
 # Villen — the `canvas` engine: a shared collaborative drawing wall (design & handoff)
 
-> **`villen-canvas`** is the fifth engine in Villen's game slot and the first built
+> **`villen-canvas`** is the fifth engine in Villen's engine slot and the first built
 > around **many writers contending over one shared state**: a room full of iPads,
 > tablets, and phones all draw on **one** canvas, and everyone sees everyone's marks
 > appear live. Apple-Pencil-natural strokes (pressure → width), touch, and mouse all
@@ -14,7 +14,7 @@ mutable-state** engine fits the single-thread loop — strokes in, applied to on
 authoritative raster, broadcast out, snapshot-able for late joiners and persistence.
 **Audience:** the agent standing this up, having read
 [`DESIGN-villen.md`](DESIGN-villen.md) and [`DESIGN-filter.md`](DESIGN-filter.md)
-(the `IGame` slot §2, the binary transport §5, and the vendored stb codec §12).
+(the `IEngine` slot §2, the binary transport §5, and the vendored stb codec §12).
 
 > **Why this engine earns its keep.** Chess sidesteps write contention with strict
 > turns; `filter` and `chat` sidestep it by being **private** per connection. None has
@@ -75,7 +75,7 @@ a stroke is a cheap CPU line-walk at these sizes; GPU is a later optimization, �
 The reason this engine is *easy* where it looks hard:
 
 ```cpp
-void CanvasGame::onText/onBinary(ConnId from, op bytes) {
+void CanvasEngine::onText/onBinary(ConnId from, op bytes) {
   Op op = parse(bytes);
   raster_.apply(op);          // <-- one thread, arrival order => total order
   log_.push(op);
@@ -154,12 +154,12 @@ Big swatches, a kid-safe palette, and a fat eraser keep it friendly.
 
 ## 6. Admin UI (the operator runs the wall)
 
-`CanvasGame::drawAdmin()`, gamepad-navigable: a live thumbnail of the wall; active
+`CanvasEngine::drawAdmin()`, gamepad-navigable: a live thumbnail of the wall; active
 artists + op-rate + raster size; **Clear**, **Freeze** (read-only), **Save/Load**
 (persist the PNG + op-log, §9.2), a **palette / max-width** editor (kid-safe limits),
 and light **moderation** — because the op-log records authorship, the operator can
 **undo one artist's recent ops** without a full clear. The admin reads/mutates the
-`CanvasGame` directly, in-process (DESIGN §9.4).
+`CanvasEngine` directly, in-process (DESIGN §9.4).
 
 ---
 
@@ -181,7 +181,7 @@ that is an access scope on the session, not a change to the engine.)
   plain CPU.
 - **CMake:** `villen_canvas` pure engine lib (raster + op-log + tests, always built,
   CI-tested, no I/O), like `villen_engine`/`villen_filter`/`villen_snake`; the
-  `CanvasGame` adapter compiles into the host.
+  `CanvasEngine` adapter compiles into the host.
 
 **Build order (smallest-spine-first):**
 1. **Pure engine + tests** — `apply(op, raster)`; op-log; deterministic raster-hash

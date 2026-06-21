@@ -1,6 +1,6 @@
 # Villen — the engine roadmap: how we choose what to build (design & index)
 
-> Villen's host is a **game-agnostic slot** (DESIGN intro, §9; the `IGame` contract in
+> Villen's host is a **game-agnostic slot** (DESIGN intro, §9; the `IEngine` contract in
 > [`DESIGN-game-framework.md`](DESIGN-game-framework.md) §4). That means the interesting question is
 > never "what's a cool app to put in the slot?" but **"what *axis* of the architecture
 > does this engine stress that nothing else does?"** An engine earns its place by
@@ -11,6 +11,13 @@
 **Status:** living index + rationale. Update it whenever an engine is added or a new
 axis is identified.
 **Audience:** anyone proposing or building a Villen engine.
+
+> **Engines vs games (two layers).** Each row below is an **engine** — the host-facing
+> runtime for a *family* of games. A **game** is a variant/ruleset an engine runs:
+> `ChessEngine` → regular + fairy chess; `CanvasEngine` → pixel-art / whiteboard /
+> pictionary. Engines stay **concrete first** (a real `ChessEngine`, not an abstract
+> `TurnBasedEngine`); shared bases are extracted only when ≥2 engines clearly need them
+> ([`DESIGN-game-framework.md`](DESIGN-game-framework.md) §1).
 
 ---
 
@@ -114,10 +121,10 @@ covered.
 - [`DESIGN-canvas.md`](DESIGN-canvas.md) — *shared-write contention.* Design.
 - [`DESIGN-jam.md`](DESIGN-jam.md) — *synchronized shared time.* Design.
 
-The canonical `IGame` contract these all implement is specified in
+The canonical `IEngine` contract these all implement is specified in
 [`DESIGN-game-framework.md`](DESIGN-game-framework.md) §4. A game is selected at startup
 by `--engine chess|filter|chat|snake|canvas|jam`, or — on the Deck, at runtime — from
-the **launcher**, which runs exactly **one game at a time**
+the **launcher**, which runs exactly **one engine at a time**
 ([`DESIGN-admin-shell.md`](DESIGN-admin-shell.md); running several concurrently is the
 deferred lobby idea, §6).
 
