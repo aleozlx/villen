@@ -68,6 +68,14 @@ int main(int argc, char** argv) {
             }
         } else if (std::strcmp(argv[i], "--chat-stub") == 0) {
             chatCfg.stub = true;  // in-host echo generator, no inference (dev/CI)
+        } else if (std::strcmp(argv[i], "--llama-bin") == 0 && i + 1 < argc) {
+            chatCfg.llamaBin = argv[++i];  // spawn & manage this llama-server (§3.A)
+        } else if (std::strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
+            chatCfg.model = argv[++i];     // -m GGUF for the spawned server (§11)
+        } else if (std::strcmp(argv[i], "--llama-ngl") == 0 && i + 1 < argc) {
+            chatCfg.ngl = std::atoi(argv[++i]);       // GPU layers (§6)
+        } else if (std::strcmp(argv[i], "--llama-parallel") == 0 && i + 1 < argc) {
+            chatCfg.parallel = std::atoi(argv[++i]);  // concurrent slots (§8)
         } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             screenshotPath = argv[++i];
             screenshotDelayMs = 2500;  // settle, let a test client connect/move

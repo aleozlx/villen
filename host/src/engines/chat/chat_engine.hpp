@@ -26,6 +26,7 @@
 
 #include "engine.hpp"
 #include "llama_client.hpp"
+#include "llama_process.hpp"
 #include "villen/chat/conversation.hpp"
 #include "villen/chat/prompt.hpp"
 
@@ -33,10 +34,18 @@ namespace villen {
 
 // How --engine chat reaches an inference backend (set from CLI, passed via the
 // factory). Default is Down: no backend wired.
+//   - llamaBin set       → spawn & manage llama-server (LlamaProcess), connect to it.
+//   - llamaPort set only  → connect to an already-running llama-server (or stub).
+//   - stub                → in-host echo generator (no inference).
+//   - none                → Down (chatSend -> backend_down).
 struct ChatBackendConfig {
     std::string llamaHost = "127.0.0.1";
-    int llamaPort = 0;   // >0 → talk to llama-server here (LlamaClient)
-    bool stub = false;   // --chat-stub → in-host echo generator (no inference)
+    int llamaPort = 0;        // connect/spawn port (spawn defaults to 8080)
+    bool stub = false;        // --chat-stub → in-host echo generator
+    std::string llamaBin;     // --llama-bin → spawn this llama-server
+    std::string model;        // -m model for the spawned server (§11)
+    int ngl = 99;             // -ngl GPU layers (§6)
+    int parallel = 2;         // --parallel slots (§8)
 };
 
 class ChatEngine : public IEngine {
@@ -67,7 +76,8 @@ class ChatEngine : public IEngine {
     int maxTokens_ = 512;
 
     Mode mode_ = Mode::Down;
-    std::unique_ptr<chat::LlamaClient> llama_;  // set in Llama mode
+    std::unique_ptr<chat::LlamaClient> llama_;     // set in Llama mode
+    std::unique_ptr<chat::LlamaProcess> process_;  // set when we spawn llama-server
 
     // Per-connection, per-convId conversation state — private, in RAM only (§11).
     std::unordered_map<ConnId,

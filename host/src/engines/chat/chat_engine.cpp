@@ -70,7 +70,21 @@ double tokensPerSec(int emitted, std::uint64_t startMs, std::uint64_t nowMs) {
 }  // namespace
 
 ChatEngine::ChatEngine(ChatBackendConfig cfg) {
-    if (cfg.llamaPort > 0) {
+    if (!cfg.llamaBin.empty()) {
+        // Spawn-and-manage: the host owns the llama-server child (§3.A).
+        mode_ = Mode::Llama;
+        int port = cfg.llamaPort > 0 ? cfg.llamaPort : 8080;
+        chat::LlamaSpawnConfig sp;
+        sp.bin = cfg.llamaBin;
+        sp.model = cfg.model;
+        sp.host = cfg.llamaHost;
+        sp.port = port;
+        sp.ngl = cfg.ngl;
+        sp.parallel = cfg.parallel;
+        process_ = std::make_unique<chat::LlamaProcess>(std::move(sp));
+        llama_ = std::make_unique<chat::LlamaClient>(cfg.llamaHost, port);
+    } else if (cfg.llamaPort > 0) {
+        // Connect to an already-running llama-server (or a stub, for tests).
         mode_ = Mode::Llama;
         llama_ = std::make_unique<chat::LlamaClient>(cfg.llamaHost, cfg.llamaPort);
     } else if (cfg.stub) {
@@ -103,11 +117,16 @@ void ChatEngine::removeGen(ConnId conn, const std::string& convId, bool abort) {
 std::string ChatEngine::configJson() const {
     json models = json::array();
     for (const auto& m : chat::knownModels()) models.push_back(m.id);
+    // ready reflects the backend: a spawned server must pass /health first; a
+    // connect-only backend is optimistic (errors surface as backend_down); Down
+    // and Stub-less is never ready.
+    bool ready = mode_ == Mode::Stub ||
+                 (mode_ == Mode::Llama && (!process_ || process_->ready()));
     json msg = {{"type", "chatConfig"},
                 {"model", model_},
                 {"models", std::move(models)},
                 {"contextMax", contextMax_},
-                {"ready", mode_ != Mode::Down}};
+                {"ready", ready}};
     return msg.dump();
 }
 
@@ -170,6 +189,11 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
         // second send while generating is rejected (queueing is a step-8 concern).
         if (genFor(conn, convId)) {
             room.send(conn, errorMsg(convId, "model_busy"));
+            return;
+        }
+        // A spawned llama-server still loading its model isn't ready yet (§9).
+        if (mode_ == Mode::Llama && process_ && !process_->ready()) {
+            room.send(conn, errorMsg(convId, "backend_down"));
             return;
         }
         chat::Conversation& c = conv(conn, convId);
@@ -264,7 +288,8 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
 
 void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
     nowMs_ = nowMs;
-    if (llama_) llama_->pump();  // drives Llama-mode sinks (may remove gens)
+    if (process_) process_->tick(nowMs);  // spawn/health/restart the child (§3.A)
+    if (llama_) llama_->pump();            // drives Llama-mode sinks (may remove gens)
 
     // Stub-mode token timer (Llama gens are driven by pump, not here).
     for (std::size_t i = 0; i < gens_.size();) {
@@ -296,9 +321,13 @@ void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
 
 std::string ChatEngine::statusLine() const {
     const char* backend = mode_ == Mode::Llama ? "llama" : (mode_ == Mode::Stub ? "stub" : "down");
+    std::string health;
+    if (process_)
+        health = process_->ready() ? ", up"
+                                   : (std::string(", ") + process_->lastError());
     std::size_t convCount = 0;
     for (const auto& kv : convs_) convCount += kv.second.size();
-    return model_ + " (" + backend + ") - " + std::to_string(convCount) +
+    return model_ + " (" + backend + health + ") - " + std::to_string(convCount) +
            " conversations, " + std::to_string(gens_.size()) + " generating";
 }
 
