@@ -124,6 +124,11 @@ void LlamaClient::pump() {
     }
 }
 
+void LlamaClient::collectFds(std::vector<int>& out) const {
+    for (const Req& r : reqs_)
+        if (r.fd >= 0) out.push_back(r.fd);
+}
+
 void LlamaClient::serviceWrite(Req& r) {
     while (!r.outbuf.empty()) {
         ssize_t n = ::send(r.fd, r.outbuf.data(), r.outbuf.size(), MSG_NOSIGNAL);

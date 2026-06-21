@@ -57,6 +57,7 @@ class ChatEngine : public IEngine {
     void onLeave(Room&, ConnId, SeatId) override;     // drop the conn's state (§11)
     void onMessage(Room&, ConnId, SeatId, std::string_view) override;
     void onTick(Room&, std::uint64_t nowMs) override; // pump SSE + drive the stub
+    void collectPollFds(std::vector<int>&) override;  // active llama sockets (§3.A)
     std::string statusLine() const override;
     void drawAdmin() override;
     void reset() override;                             // stop all + clear

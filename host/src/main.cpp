@@ -153,8 +153,14 @@ int main(int argc, char** argv) {
     // Headless (or the admin window was unavailable): there is no launcher, so an
     // engine must be running. Start the default if nothing is active yet.
     if (!host.running()) host.startEngine(startIndex);
+    std::vector<int> pollFds;  // engine fds folded into the wait set each iteration
     while (g_running) {
-        ws.poll(100);
+        // Fold the active engine's fds (a streaming inference socket) into poll so
+        // an inbound token ends the 100ms block at once and the tick drains it —
+        // without this the loop only checks the socket on the next timeout.
+        pollFds.clear();
+        host.collectPollFds(pollFds);
+        ws.poll(100, pollFds);
         host.tick(nowMs());
     }
 

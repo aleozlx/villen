@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace villen::net {
 
@@ -45,7 +46,13 @@ public:
     // Drain socket events: accept, read+parse frames (-> onMessage), flush queued
     // writes, reap closed conns (-> onClose). Blocks up to timeoutMs for activity
     // (0 = non-blocking poll, suitable for a 60 fps render loop).
-    void poll(int timeoutMs);
+    //
+    // extraReadFds are fds the server does NOT own (e.g. an engine's inference
+    // socket): they are added to the wait set for POLLIN so their readiness ends
+    // the block early, but the server never reads them — the owner drains them
+    // right after, in the same loop iteration. Lets a streaming engine wake the
+    // loop on a token without the server having to know what the fd is.
+    void poll(int timeoutMs, const std::vector<int>& extraReadFds = {});
 
     // Queue a UTF-8 text frame to one connection / all open connections.
     void send(ConnId id, std::string_view text);

@@ -322,6 +322,13 @@ void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
     }
 }
 
+void ChatEngine::collectPollFds(std::vector<int>& out) {
+    // Llama-mode generation sockets: let the host's poll() wake on an inbound
+    // token so onTick→pump() drains it at once, instead of at the poll cadence.
+    // Stub/Down have no sockets; their gens advance on the onTick clock anyway.
+    if (llama_) llama_->collectFds(out);
+}
+
 std::string ChatEngine::statusLine() const {
     const char* backend = mode_ == Mode::Llama ? "llama" : (mode_ == Mode::Stub ? "stub" : "down");
     std::string health;
