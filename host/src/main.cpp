@@ -90,8 +90,16 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "villen: unknown --engine '%s', using '%s'\n",
                          engineName, host.engineName(0));
     }
-    // Until the launcher UI lands, boot straight into the selected engine.
-    host.startEngine(startIndex);
+    // The launcher window is the default only with a display and no --engine:
+    // there the operator picks an engine (DESIGN-admin-shell §4). With --engine
+    // (kiosk), or headless (no launcher to pick from), boot straight into the
+    // chosen engine instead.
+    bool wantLauncher = false;
+#ifdef VILLEN_ADMIN_UI
+    bool hasDisplay = std::getenv("DISPLAY") || std::getenv("WAYLAND_DISPLAY");
+    wantLauncher = !headless && hasDisplay && !engineName;
+#endif
+    if (!wantLauncher) host.startEngine(startIndex);
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
@@ -107,7 +115,6 @@ int main(int argc, char** argv) {
     // Only attempt the admin window when a display server is actually present
     // (the Deck in Game Mode has one); otherwise SDL would stall probing for one
     // on a headless box. The window loop pumps ws.poll() + host.tick() itself.
-    bool hasDisplay = std::getenv("DISPLAY") || std::getenv("WAYLAND_DISPLAY");
     if (!headless && hasDisplay &&
         villen::admin::runAdminLoop(host, ws, &g_running, screenshotDelayMs,
                                     screenshotPath)) {
@@ -121,6 +128,9 @@ int main(int argc, char** argv) {
     (void)screenshotPath;
 #endif
 
+    // Headless (or the admin window was unavailable): there is no launcher, so an
+    // engine must be running. Start the default if nothing is active yet.
+    if (!host.running()) host.startEngine(startIndex);
     while (g_running) {
         ws.poll(100);
         host.tick(nowMs());
