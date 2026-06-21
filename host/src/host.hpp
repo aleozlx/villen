@@ -40,6 +40,11 @@ class Host {
     // Per-frame, so real-time engines advance even with no input (framework §5.1).
     void tick(std::uint64_t nowMs);
 
+    // Gather the active engine's pollable fds (if any) so the main loop can fold
+    // them into ws.poll() — a streaming engine then wakes the loop on a token
+    // rather than waiting out the poll timeout. No-op at the launcher.
+    void collectPollFds(std::vector<int>& out);
+
     // State for the admin shell.
     bool running() const { return active_ != nullptr; }
     std::size_t activeIndex() const { return activeIndex_; }

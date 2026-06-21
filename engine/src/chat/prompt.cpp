@@ -27,6 +27,15 @@ const ModelInfo* findModel(std::string_view id) {
     return nullptr;
 }
 
+const ModelInfo* matchModelByFilename(std::string_view filename) {
+    std::string lc(filename);
+    for (char& c : lc)
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    for (const auto& m : knownModels())
+        if (lc.find(m.id) != std::string::npos) return &m;
+    return nullptr;
+}
+
 const std::vector<std::string>& stopTokens(ModelFamily f) {
     static const std::vector<std::string> kLlama3  = {"<|eot_id|>"};
     static const std::vector<std::string> kChatML  = {"<|im_end|>"};

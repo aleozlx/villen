@@ -150,6 +150,21 @@ TEST_CASE("stop tokens per family (§4)") {
     CHECK(stopTokens(ModelFamily::Mistral) == std::vector<std::string>{"</s>"});
 }
 
+TEST_CASE("GGUF filenames map to the right model (§5 model registry)") {
+    // The conventional bartowski/Q4_K_M names the host scans on the Deck.
+    REQUIRE(matchModelByFilename("Qwen2.5-7B-Instruct-Q4_K_M.gguf") != nullptr);
+    CHECK(matchModelByFilename("Qwen2.5-7B-Instruct-Q4_K_M.gguf")->id == "qwen2.5-7b-instruct");
+    CHECK(matchModelByFilename("Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")->id ==
+          "llama-3.1-8b-instruct");
+    CHECK(matchModelByFilename("Mistral-7B-Instruct-v0.3-Q4_K_M.gguf")->id ==
+          "mistral-7b-instruct");
+    // Case-insensitive, and a different quant still matches.
+    CHECK(matchModelByFilename("qwen2.5-7b-instruct-q8_0.gguf")->id == "qwen2.5-7b-instruct");
+    // No false positives on unrelated GGUFs.
+    CHECK(matchModelByFilename("phi-3-mini-4k-instruct-q4.gguf") == nullptr);
+    CHECK(matchModelByFilename("random.gguf") == nullptr);
+}
+
 // --- Prompt templating — exact rendered strings (§4) -------------------------
 // These pin the fallback raw-prompt path. The primary path lets llama-server
 // apply the GGUF template; this is the override for GGUFs whose template is

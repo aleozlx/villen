@@ -1,6 +1,9 @@
 #include "chat_engine.hpp"
 
+#include <dirent.h>
+
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -72,17 +75,49 @@ double tokensPerSec(int emitted, std::uint64_t startMs, std::uint64_t nowMs) {
     return static_cast<double>(emitted) * 1000.0 / static_cast<double>(nowMs - startMs);
 }
 
+// Lowercased copy, for the case-insensitive ".gguf" suffix test in scanModels.
+// (Model-name matching itself lives in the pure core: chat::matchModelByFilename.)
+std::string toLower(std::string s) {
+    for (char& c : s) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return s;
+}
+
 }  // namespace
 
 ChatEngine::ChatEngine(ChatBackendConfig cfg) {
-    // The operator-supplied model id → GGUF map (§11): the console's Load/Switch
-    // resolves a selected id to a path here. Fold the legacy single --model path
-    // in under the startup model id so it stays switchable-back-to.
+    // Build the operator-supplied model id → GGUF map (§11; weights aren't
+    // shipped). Explicit --model-path entries first, then any GGUFs discovered in
+    // --models-dir (scanModels never overwrites an explicit entry). The console's
+    // Load/Switch and cycleModel resolve a model id to a path here.
     for (const auto& kv : cfg.modelPaths) {
         modelPaths_[kv.first] = kv.second;
     }
-    if (!cfg.model.empty() && !modelPaths_.count(model_)) {
-        modelPaths_[model_] = cfg.model;
+    scanModels(cfg.modelsDir);
+
+    if (!cfg.model.empty()) {
+        // Legacy --model PATH: match its filename to a known id (so it's labelled
+        // right and switchable back to) and adopt that id; an unrecognised name
+        // keeps the default id but still registers its path.
+        const std::string base = cfg.model.substr(cfg.model.find_last_of('/') + 1);
+        if (const chat::ModelInfo* mi = chat::matchModelByFilename(base)) {
+            if (!modelPaths_.count(mi->id)) {
+                modelPaths_[mi->id] = cfg.model;
+            }
+            model_ = mi->id;
+        } else if (!modelPaths_.count(model_)) {
+            modelPaths_[model_] = cfg.model;
+        }
+    } else {
+        // No explicit --model: start on the first knownModels() id we have a GGUF
+        // for (Qwen first), so the spawned server actually gets a -m.
+        for (const auto& m : chat::knownModels()) {
+            if (modelPaths_.count(m.id)) {
+                model_ = m.id;
+                break;
+            }
+        }
     }
     pendingModel_ = model_;
 
@@ -92,7 +127,7 @@ ChatEngine::ChatEngine(ChatBackendConfig cfg) {
         int port = cfg.llamaPort > 0 ? cfg.llamaPort : 8080;
         chat::LlamaSpawnConfig sp;
         sp.bin = cfg.llamaBin;
-        sp.model = cfg.model;
+        sp.model = pathForModel(model_);  // resolved path (cfg.model may be empty)
         sp.host = cfg.llamaHost;
         sp.port = port;
         sp.ngl = cfg.ngl;
@@ -134,20 +169,50 @@ void ChatEngine::removeGen(ConnId conn, const std::string& convId, bool abort) {
                 gens_.end());
 }
 
+bool ChatEngine::backendReady() const {
+    // A spawned server must pass /health first; a connect-only backend is optimistic
+    // (errors surface as backend_down); Down (and Stub-less) is never ready.
+    return mode_ == Mode::Stub ||
+           (mode_ == Mode::Llama && (!process_ || process_->ready()));
+}
+
 std::string ChatEngine::configJson() const {
     json models = json::array();
     for (const auto& m : chat::knownModels()) models.push_back(m.id);
-    // ready reflects the backend: a spawned server must pass /health first; a
-    // connect-only backend is optimistic (errors surface as backend_down); Down
-    // and Stub-less is never ready.
-    bool ready = mode_ == Mode::Stub ||
-                 (mode_ == Mode::Llama && (!process_ || process_->ready()));
     json msg = {{"type", "chatConfig"},
                 {"model", model_},
                 {"models", std::move(models)},
                 {"contextMax", contextMax_},
-                {"ready", ready}};
+                {"ready", backendReady()}};
     return msg.dump();
+}
+
+void ChatEngine::scanModels(const std::string& dir) {
+    // Fill gaps in modelPaths_ from a GGUF directory (§5): each *.gguf whose
+    // filename matches a known model id/family becomes a switchable model. Explicit
+    // --model-path entries win, so the scan only adds ids not already present.
+    if (dir.empty()) {
+        return;
+    }
+    DIR* d = ::opendir(dir.c_str());
+    if (!d) {
+        return;
+    }
+    std::string base = dir;
+    if (!base.empty() && base.back() != '/') {
+        base += '/';
+    }
+    while (dirent* e = ::readdir(d)) {
+        std::string name = e->d_name;
+        if (name.size() < 5 || toLower(name).rfind(".gguf") != name.size() - 5) {
+            continue;
+        }
+        const chat::ModelInfo* mi = chat::matchModelByFilename(name);
+        if (mi && !modelPaths_.count(mi->id)) {
+            modelPaths_[mi->id] = base + name;
+        }
+    }
+    ::closedir(d);
 }
 
 std::string ChatEngine::requestBody(const chat::Conversation& c) const {
@@ -345,6 +410,24 @@ void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
             ++i;
         }
     }
+
+    // Tell clients when backend readiness flips — a (re)load finished or the model
+    // went away — so they learn it without polling through backend_down. Edge-
+    // triggered: broadcast only on the transition (a token-rate path stays quiet).
+    bool ready = backendReady();
+    if (ready != readyBroadcast_) {
+        readyBroadcast_ = ready;
+        room.broadcast(configJson());
+    }
+}
+
+void ChatEngine::collectPollFds(std::vector<int>& out) {
+    // Llama-mode generation sockets: let the host's poll() wake on an inbound
+    // token so onTick→pump() drains it at once, instead of at the poll cadence.
+    // Stub/Down have no sockets; their gens advance on the onTick clock anyway.
+    if (llama_) {
+        llama_->collectFds(out);
+    }
 }
 
 std::string ChatEngine::statusLine() const {
@@ -394,6 +477,27 @@ void ChatEngine::loadPendingModel() {
     if (room_) {
         room_->broadcast(configJson());
     }
+}
+
+void ChatEngine::cycleModel() {
+    // Headless operator switch (SIGUSR1): advance to the next knownModels() id that
+    // has a configured GGUF (deterministic order), then load it through the normal
+    // switch path. The Game-Mode operator uses the admin console combo instead.
+    std::vector<std::string> ids;
+    for (const auto& m : chat::knownModels()) {
+        if (!pathForModel(m.id).empty()) {
+            ids.push_back(m.id);
+        }
+    }
+    if (ids.size() < 2) {
+        return;
+    }
+    std::size_t i = 0;
+    while (i < ids.size() && ids[i] != model_) {
+        ++i;
+    }
+    pendingModel_ = (i + 1 < ids.size()) ? ids[i + 1] : ids[0];  // wrap; not-found → first
+    loadPendingModel();
 }
 
 void ChatEngine::stopAll() {

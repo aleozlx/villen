@@ -45,12 +45,15 @@ struct ChatBackendConfig {
     bool stub = false;        // --chat-stub → in-host echo generator
     std::string llamaBin;     // --llama-bin → spawn this llama-server
     std::string model;        // -m model for the spawned server (§11)
+    std::string modelsDir;    // --models-dir → scan for switchable GGUFs (§5)
     int ngl = 99;             // -ngl GPU layers (§6)
     int parallel = 2;         // --parallel slots (§8)
     // Operator-supplied model id → GGUF path map (§11; weights are not shipped),
     // from repeated --model-path id=path. The admin console's Load/Switch (§9)
     // resolves the selected model id to a path here and restarts llama-server
-    // with it. The first entry (or `model`) is the model loaded at startup.
+    // with it. --models-dir fills any gaps by matching filenames (scanModels),
+    // never overwriting an explicit entry. The startup model is `model`, else the
+    // first knownModels() id that has a path.
     std::vector<std::pair<std::string, std::string>> modelPaths;
 };
 
@@ -63,9 +66,16 @@ class ChatEngine : public IEngine {
     void onLeave(Room&, ConnId, SeatId) override;     // drop the conn's state (§11)
     void onMessage(Room&, ConnId, SeatId, std::string_view) override;
     void onTick(Room&, std::uint64_t nowMs) override; // pump SSE + drive the stub
+    void collectPollFds(std::vector<int>&) override;  // active llama sockets (§3.A)
     std::string statusLine() const override;
     void drawAdmin() override;
     void reset() override;                             // stop all + clear
+
+    // Headless operator control (§5): advance to the next model with a configured
+    // GGUF and load it via the normal switch path. The Game-Mode operator uses the
+    // admin console combo instead; this is the SIGUSR1 trigger for the SSH/headless
+    // Deck. Public because main()'s signal pump calls it through the active engine.
+    void cycleModel();
 
  private:
     enum class Mode { Down, Stub, Llama };
@@ -87,9 +97,13 @@ class ChatEngine : public IEngine {
     // not yet committed (Load/Switch applies it), and the last load's feedback.
     std::string pendingModel_ = model_;
     std::string loadError_;
-    // Operator-supplied model id → GGUF path (from ChatBackendConfig::modelPaths);
-    // empty path / missing id ⇒ that model can't be loaded (no weights shipped, §11).
+    // Operator-supplied model id → GGUF path (from --model-path / --models-dir /
+    // --model). Empty path / missing id ⇒ that model can't be loaded (no weights
+    // shipped, §11).
     std::unordered_map<std::string, std::string> modelPaths_;
+    // Last backend-ready state pushed to clients, so onTick broadcasts chatConfig
+    // only when readiness flips (a (re)load finished or the model went away).
+    bool readyBroadcast_ = false;
 
     Mode mode_ = Mode::Down;
     std::unique_ptr<chat::LlamaClient> llama_;     // set in Llama mode
@@ -136,6 +150,12 @@ class ChatEngine : public IEngine {
     void startLlama(Room&, ConnId, const std::string& convId);
     std::string requestBody(const chat::Conversation&) const;  // /v1/chat body
     std::string configJson() const;                            // chatConfig (§7)
+    bool backendReady() const;                                 // chatConfig.ready
+
+    // Fill any gaps in modelPaths_ from a GGUF directory (§5): each *.gguf whose
+    // filename matches a known model id/family (chat::matchModelByFilename) is
+    // registered — but never overwriting an explicit --model-path entry.
+    void scanModels(const std::string& dir);
 
     // GGUF path for a model id, or "" if the operator configured none (§11).
     std::string pathForModel(const std::string& id) const;

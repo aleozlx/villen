@@ -59,6 +59,11 @@ class LlamaClient {
 
     std::size_t activeCount() const { return reqs_.size(); }
 
+    // Append every active request's socket so the host can fold them into its
+    // poll() wait set — then a token arriving wakes the loop immediately and the
+    // next pump() drains it, instead of waiting out the poll timeout.
+    void collectFds(std::vector<int>& out) const;
+
  private:
     struct Req {
         ReqId id = 0;

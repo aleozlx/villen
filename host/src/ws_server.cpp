@@ -168,7 +168,7 @@ bool WsServer::listen(std::uint16_t port) {
     return true;
 }
 
-void WsServer::poll(int timeoutMs) {
+void WsServer::poll(int timeoutMs, const std::vector<int>& extraReadFds) {
     if (listenFd_ < 0) return;
 
     std::vector<pollfd> pfds;
@@ -180,6 +180,11 @@ void WsServer::poll(int timeoutMs) {
         pfds.push_back({c.fd, events, 0});
         order.push_back(id);
     }
+    // Foreign fds (an engine's inference socket): watched only so their readiness
+    // ends the block early. They sit after the conn fds, past `order.size()`, so
+    // the per-conn loop below never touches them — the owner reads them in onTick.
+    for (int fd : extraReadFds)
+        if (fd >= 0) pfds.push_back({fd, POLLIN, 0});
 
     int n = ::poll(pfds.data(), pfds.size(), timeoutMs);
     if (n <= 0) return;
