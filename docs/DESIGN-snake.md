@@ -45,7 +45,10 @@ arena for solo play.
 This is a **port, not a rewrite**: the upstream `snake2` already has the right
 shape — an event-driven core whose `GAME_TICK` drives the simulation, a grid it
 serialized whole into a memory-mapped circular buffer each frame, multi-
-`SDL_GameController` input, and A\* pathfinding for AI. Villen keeps the
+`SDL_GameController` input, and A\* pathfinding for AI. (Provenance: the upstream
+Snake was itself authored by a Claude Code **Sonnet-tier** agent in **2025**, so the
+port agent will meet familiar AI-written C++ — a fitting lineage, an earlier-tier
+agent's game ported onto an architecture these docs design.) Villen keeps the
 *simulation*, and swaps the *edges*: SDL input → WebSocket direction messages, the
 OpenGL/shader renderer → a browser canvas, the circular-buffer grid dump → the WS
 state broadcast, and the SDL event loop's `GAME_TICK` → Villen's single-thread loop
