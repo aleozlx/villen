@@ -45,6 +45,16 @@ is nothing to isolate it *from*.
 its own single-game binary, same `IGame` contract, just without the launcher. The
 multi-game host is the chosen Deck face.)*
 
+**Why a multi-game host, not one binary per game.** Standing a game up as its *own*
+binary is heavier than swapping rules: it also wants its own Steam-library shortcut,
+capsule/hero/icon art ([`villen-art-brief.md`](villen-art-brief.md)), and a UI pass —
+real overhead only worth paying when a game is significant enough to be its own
+*product*. Villen's focus is a **pocket game-server demo** — a handful of small games
+you carry and switch between — so the lighter, built-in, **streamlined game switching**
+wins. The submodule single-game shape above stays available for when a game *is* that
+significant; and a more dynamic **hot-pluggable** game module is a someday-maybe we may
+toy with on some level — explicitly out of scope today.
+
 ---
 
 ## 2. Two audiences — and the admin console is *not* a contract surface
