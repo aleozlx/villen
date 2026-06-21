@@ -77,5 +77,13 @@ need the cross-build-and-copy dance above.
 - Keep the **engine pure** (no graphics/socket/device code) and all network
   concerns on the player WebSocket edge (DESIGN §9).
 - C++17, "C with destructors" style: flat, allocation-visible, RAII for handles.
+- **Brace every `if`/`else`/`for`/`while` body, even a single statement** — no
+  unbraced guard clauses or early returns (guards against the `goto fail;`-class
+  bug and keeps later diffs safe).
 - **Do not commit local infrastructure details** (personal IPs, hostnames,
   account names, keys). Generic Steam Deck / SteamOS facts are fine.
+
+When **reviewing** a change — whether you are a human reviewer or the CI
+`claude-review` bot — apply [`docs/CODE-REVIEW.md`](docs/CODE-REVIEW.md): the
+review standard, the Villen architectural invariants, and the full style rules
+(including the brace rule above).
