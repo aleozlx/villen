@@ -22,7 +22,9 @@ const capCtx = cap.getContext("2d", { willReadFrequently: true });
 
 let ws = null;
 let seq = 0;            // our monotonically increasing frame counter (§5.2)
-let lastShownSeq = -1;  // drop out-of-order/stale replies (§5.3)
+let lastShownSeq = -1;  // newest reply accepted for decode; drop staler ones (§5.3)
+let lastDrawnSeq = -1;  // newest reply actually painted; decode is async so two
+                        // accepted replies can resolve out of order (§5.3)
 let videoEl = null;     // the live <video> camera source, when granted
 let useTestPattern = false;
 let sending = false;    // client-side drop-to-latest: never queue >1 unsent frame
@@ -83,10 +85,20 @@ function onBinary(buf) {
   lastShownSeq = rseq;
 
   const t0 = sentAt.get(rseq);
-  if (t0 !== undefined) { rttMs = performance.now() - t0; sentAt.delete(rseq); }
+  if (t0 !== undefined) {
+    rttMs = performance.now() - t0;
+    // The server drops frames under load (§5.3), so those seqs never get a reply.
+    // seqs only grow, so anything <= rseq is now answered or abandoned: clearing
+    // up to rseq keeps sentAt from leaking the dropped ones.
+    for (const s of sentAt.keys()) if (s <= rseq) sentAt.delete(s);
+  }
 
   const blob = new Blob([new Uint8Array(buf, 8)], { type: "image/jpeg" });
   createImageBitmap(blob).then((bmp) => {
+    // Decode is async: a stale frame can resolve after a newer one already painted.
+    // Re-check against the last *drawn* seq so we never overwrite newer with older.
+    if (rseq <= lastDrawnSeq) { bmp.close(); return; }
+    lastDrawnSeq = rseq;
     if (outCanvas.width !== bmp.width) outCanvas.width = bmp.width;
     if (outCanvas.height !== bmp.height) outCanvas.height = bmp.height;
     outCtx.drawImage(bmp, 0, 0, outCanvas.width, outCanvas.height);

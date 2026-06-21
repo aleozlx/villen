@@ -5,7 +5,9 @@
 #include <GLES3/gl31.h>
 
 #include <cctype>
+#include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace villen {
 namespace {
@@ -67,19 +69,41 @@ void main() {
 
 enum { kSub = 0, kThresh = 1, kInvert = 2 };
 
+// Dump a shader/program info log to stderr. GLES 3.1 compute is driver-specific
+// (the Deck's radeonsi especially), so a silent 0 here is near-undebuggable; the
+// log tells the operator exactly why the APU path fell back to the CPU reference.
+void logGlObject(GLuint obj, bool isProgram, const char* what) {
+    GLint len = 0;
+    if (isProgram) glGetProgramiv(obj, GL_INFO_LOG_LENGTH, &len);
+    else glGetShaderiv(obj, GL_INFO_LOG_LENGTH, &len);
+    if (len <= 0) return;
+    std::vector<char> log(static_cast<std::size_t>(len));
+    if (isProgram) glGetProgramInfoLog(obj, len, nullptr, log.data());
+    else glGetShaderInfoLog(obj, len, nullptr, log.data());
+    std::fprintf(stderr, "filter GPU: %s failed:\n%s\n", what, log.data());
+}
+
 GLuint compileCompute(const char* src) {
     GLuint sh = glCreateShader(GL_COMPUTE_SHADER);
     glShaderSource(sh, 1, &src, nullptr);
     glCompileShader(sh);
     GLint ok = 0;
     glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
-    if (!ok) { glDeleteShader(sh); return 0; }
+    if (!ok) {
+        logGlObject(sh, /*isProgram=*/false, "compute shader compile");
+        glDeleteShader(sh);
+        return 0;
+    }
     GLuint prog = glCreateProgram();
     glAttachShader(prog, sh);
     glLinkProgram(prog);
     glDeleteShader(sh);
     glGetProgramiv(prog, GL_LINK_STATUS, &ok);
-    if (!ok) { glDeleteProgram(prog); return 0; }
+    if (!ok) {
+        logGlObject(prog, /*isProgram=*/true, "compute program link");
+        glDeleteProgram(prog);
+        return 0;
+    }
     return prog;
 }
 
@@ -286,8 +310,15 @@ filter::Image GpuBackend::process(const filter::Image& in, const filter::Pipelin
         return fail;
     }
     std::vector<unsigned char> out(n * 4);
+    // GL_PACK_ALIGNMENT is per-context state we set for the tight rgba8ui readback.
+    // This EGL compute context is separate from the admin window's GL context, so
+    // it can't corrupt ImGui — but restore the default anyway as hygiene, so future
+    // readback consumers on this context aren't surprised by a stale alignment.
+    GLint prevAlign = 4;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &prevAlign);
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, in.width, in.height, GL_RGBA_INTEGER, GL_UNSIGNED_BYTE, out.data());
+    glPixelStorei(GL_PACK_ALIGNMENT, prevAlign);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (glGetError() != GL_NO_ERROR) return fail;
 

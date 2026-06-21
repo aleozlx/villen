@@ -84,8 +84,16 @@ const char* colorName(filter::Color c) {
     return "perChannel";
 }
 
+// A hostile client controls the JPEG it sends, so the *decoded* dimensions are
+// untrusted: a 20000x20000 frame would allocate ~1.1 GB and bury the single loop
+// in morphology work (DoS). Cap decoded frames well above any real capture size
+// (the server asks for 320x240, §5.2) and drop anything larger.
+constexpr int kMaxFrameDim = 2048;
+
 // Encode an Image to a JPEG byte string via stb (no stdio). Empty on failure.
 std::string encodeJpeg(const filter::Image& img, int quality) {
+    if (img.empty()) return {};  // a failed pipeline yields no pixels: don't feed
+                                 // stb a null buffer (it would crash, not no-op)
     std::string out;
     auto sink = [](void* ctx, void* data, int size) {
         auto* s = static_cast<std::string*>(ctx);
@@ -197,6 +205,9 @@ void FilterEngine::onMessage(Room&, ConnId, SeatId, std::string_view text) {
 }
 
 void FilterEngine::onBinary(Room&, ConnId id, SeatId, std::string_view bytes) {
+    // A valid frame is an 8-byte header + JPEG; anything shorter is malformed.
+    // Rejecting it here also keeps assign() off a possibly-null empty-view pointer.
+    if (bytes.size() < 8) return;
     // Drop-to-latest (§5.3): a new frame overwrites any unprocessed older one, so
     // a fast camera can never make the loop fall behind. Dropping is correct.
     Feed& f = feeds_[id];
@@ -229,6 +240,12 @@ void FilterEngine::processFeed(Room& room, ConnId id, Feed& feed, std::uint64_t 
     int w = 0, h = 0, ch = 0;
     unsigned char* px = stbi_load_from_memory(jpeg, jlen, &w, &h, &ch, 3);
     if (!px) return;  // undecodable -> drop this frame, keep the feed alive
+    // The decoded size is untrusted (§10): refuse an oversized frame before it can
+    // allocate gigabytes or stall the loop, and free stb's buffer either way.
+    if (w <= 0 || h <= 0 || w > kMaxFrameDim || h > kMaxFrameDim) {
+        stbi_image_free(px);
+        return;
+    }
     clock_t::time_point t1 = clock_t::now();
 
     filter::Image img(w, h, 3);
