@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <utility>
 
@@ -90,8 +91,49 @@ std::string encodeJpeg(const filter::Image& img, int quality) {
 
 }  // namespace
 
+FilterEngine::FilterEngine() {
+#ifdef VILLEN_FILTER_GPU
+    // Own a headless surfaceless-EGL compute context, independent of the admin
+    // window (§4.1). Degrade to the CPU reference if there's no GPU.
+    std::string why;
+    gpu_ = GpuBackend::tryCreate(&why);
+    if (gpu_ && gpu_->software()) {
+        std::fprintf(stderr,
+                     "filter: WARNING GPU is a software rasteriser (%s) — the APU "
+                     "thesis failed; using the CPU reference (§4.1)\n",
+                     gpu_->renderer().c_str());
+    } else if (gpu_) {
+        std::fprintf(stderr, "filter: GPU backend ready: %s\n",
+                     gpu_->renderer().c_str());
+    } else {
+        std::fprintf(stderr, "filter: no GPU backend (%s) — CPU reference\n",
+                     why.c_str());
+    }
+#endif
+}
+
 filter::Pipeline FilterEngine::defaultPipeline() {
     return filter::presets::gradient(2);  // the §5.2 example: gradient, disk r2
+}
+
+filter::Image FilterEngine::runPipeline(const filter::Image& in) {
+#ifdef VILLEN_FILTER_GPU
+    // Use the APU only when it is real hardware; a software rasteriser is slower
+    // and no more correct than the reference (§4.1). PerChannel only for now (the
+    // GPU kernels are per-channel; other colour modes run on the CPU reference).
+    if (gpu_ && !gpu_->software() && pipeline_.color == filter::Color::PerChannel) {
+        filter::Image out = gpu_->process(in, pipeline_);
+        if (!out.empty()) return out;  // empty => GL error: fall through to CPU
+    }
+#endif
+    return filter::process(in, pipeline_);
+}
+
+const char* FilterEngine::backendLabel() const {
+#ifdef VILLEN_FILTER_GPU
+    if (gpu_) return gpu_->software() ? "GPU (software!)" : "GPU (APU)";
+#endif
+    return "CPU reference";
 }
 
 std::string FilterEngine::configMsg() const {
@@ -183,7 +225,7 @@ void FilterEngine::processFeed(Room& room, ConnId id, Feed& feed, std::uint64_t 
     std::memcpy(img.px.data(), px, static_cast<std::size_t>(w) * h * 3);
     stbi_image_free(px);
 
-    filter::Image out = filter::process(img, pipeline_);
+    filter::Image out = runPipeline(img);  // APU when real, else CPU reference
     clock_t::time_point t2 = clock_t::now();
 
     std::string jpegOut = encodeJpeg(out, quality_);
@@ -209,8 +251,9 @@ void FilterEngine::processFeed(Room& room, ConnId id, Feed& feed, std::uint64_t 
 }
 
 std::string FilterEngine::statusLine() const {
-    std::string s = "filter (CPU reference) - ";
-    s += std::to_string(feeds_.size()) + " feed(s), ";
+    std::string s = "filter (";
+    s += backendLabel();
+    s += ") - " + std::to_string(feeds_.size()) + " feed(s), ";
     s += std::to_string(pipeline_.stages.size()) + " stage(s)";
     return s;
 }
@@ -226,9 +269,16 @@ void FilterEngine::drawAdmin() {
 #ifdef VILLEN_ADMIN_UI
     bool changed = false;
 
-    // The APU-vs-llvmpipe truth lives with the GPU backend (§4.1/§8); the CPU
-    // reference is the always-correct fallback and labels itself plainly.
-    ImGui::Text("Backend: CPU reference");
+    // The operator must be able to *see* it is the real APU and not llvmpipe
+    // (§4.1/§8): show the backend label and the GL_RENDERER string.
+    ImGui::Text("Backend: %s", backendLabel());
+#ifdef VILLEN_FILTER_GPU
+    if (gpu_) {
+        ImVec4 col = gpu_->software() ? ImVec4(0.95f, 0.4f, 0.4f, 1.0f)
+                                      : ImVec4(0.5f, 0.86f, 0.5f, 1.0f);
+        ImGui::TextColored(col, "%s", gpu_->renderer().c_str());
+    }
+#endif
     ImGui::TextUnformatted(statusLine().c_str());
     ImGui::Spacing();
 

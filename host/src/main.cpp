@@ -25,6 +25,13 @@
 #ifdef VILLEN_ADMIN_UI
 #include "admin_ui.hpp"
 #endif
+#ifdef VILLEN_FILTER_GPU
+#include <cstdio>
+#include <vector>
+
+#include "engines/filter/gpu_backend.hpp"
+#include "villen/filter/presets.hpp"
+#endif
 
 namespace {
 volatile std::sig_atomic_t g_running = 1;
@@ -35,6 +42,94 @@ std::uint64_t nowMs() {
     return static_cast<std::uint64_t>(
         duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
 }
+
+#ifdef VILLEN_FILTER_GPU
+// Validate the GPU backend against the CPU reference (DESIGN-filter §4.3): for
+// integer operators the two MUST be byte-identical. This is the oracle that makes
+// the APU path verifiable, not trusted; it doubles as the Deck spike's GL_RENDERER
+// + timing check (§13 step 7). Returns 0 on full agreement, 1 on a mismatch, 2 if
+// no GPU is present.
+int runFilterSelfTest() {
+    using namespace villen;
+    std::string why;
+    auto gpu = GpuBackend::tryCreate(&why);
+    if (!gpu) {
+        std::printf("filter selftest: NO GPU (%s)\n", why.c_str());
+        return 2;
+    }
+    std::printf("filter selftest: renderer = %s%s\n", gpu->renderer().c_str(),
+                gpu->software() ? "  [SOFTWARE — not the APU!]" : "");
+
+    auto img = [](int w, int h) {
+        filter::Image im(w, h, 3);
+        for (int y = 0; y < h; ++y)
+            for (int x = 0; x < w; ++x) {
+                im.at(x, y, 0) = static_cast<unsigned char>((x * 7 + y * 3) & 0xFF);
+                im.at(x, y, 1) = static_cast<unsigned char>(((x ^ y) * 5) & 0xFF);
+                im.at(x, y, 2) = static_cast<unsigned char>(x < w / 2 ? 20 : 200);
+            }
+        return im;
+    }(67, 49);  // odd dims to exercise the partial workgroup edge
+
+    auto stage = [](filter::Op op, filter::SE se, int r, std::uint8_t t = 128,
+                    bool inv = false) {
+        filter::Pipeline p;
+        p.stages.push_back({op, {se, r}, t, inv});
+        return p;
+    };
+    struct Case { const char* name; filter::Pipeline p; };
+    std::vector<Case> cases = {
+        {"erode box1", stage(filter::Op::Erode, filter::SE::Box, 1)},
+        {"erode cross2", stage(filter::Op::Erode, filter::SE::Cross, 2)},
+        {"erode disk3", stage(filter::Op::Erode, filter::SE::Disk, 3)},
+        {"dilate box2", stage(filter::Op::Dilate, filter::SE::Box, 2)},
+        {"dilate disk2", stage(filter::Op::Dilate, filter::SE::Disk, 2)},
+        {"open box2", stage(filter::Op::Open, filter::SE::Box, 2)},
+        {"close disk2", stage(filter::Op::Close, filter::SE::Disk, 2)},
+        {"gradient disk2", stage(filter::Op::Gradient, filter::SE::Disk, 2)},
+        {"tophat disk2", stage(filter::Op::TopHat, filter::SE::Disk, 2)},
+        {"blackhat box1", stage(filter::Op::BlackHat, filter::SE::Box, 1)},
+        {"threshold100", stage(filter::Op::Threshold, filter::SE::Box, 0, 100)},
+        {"dilate disk2 inv", stage(filter::Op::Dilate, filter::SE::Disk, 2, 0, true)},
+        {"edgeThreshold", filter::presets::edgeThreshold(2, 64)},
+    };
+
+    int fails = 0;
+    for (const Case& c : cases) {
+        filter::Image cpu = filter::process(img, c.p);
+        filter::Image g = gpu->process(img, c.p);
+        int maxDiff = -1;
+        if (g.empty() || g.px.size() != cpu.px.size()) {
+            maxDiff = 999;
+        } else {
+            maxDiff = 0;
+            for (std::size_t i = 0; i < cpu.px.size(); ++i) {
+                int d = std::abs(int(cpu.px[i]) - int(g.px[i]));
+                if (d > maxDiff) maxDiff = d;
+            }
+        }
+        bool ok = maxDiff == 0;
+        if (!ok) ++fails;
+        std::printf("  [%s] %-18s maxdiff=%d\n", ok ? "PASS" : "FAIL", c.name, maxDiff);
+    }
+
+    // Timing: the per-frame morphology should be sub-millisecond at 320x240 (§3.4).
+    filter::Image big(320, 240, 3);
+    filter::Pipeline grad = filter::presets::gradient(2);
+    gpu->process(big, grad);  // warm up
+    using namespace std::chrono;
+    auto t0 = steady_clock::now();
+    const int iters = 50;
+    for (int i = 0; i < iters; ++i) gpu->process(big, grad);
+    double msEach = duration<double, std::milli>(steady_clock::now() - t0).count() / iters;
+    std::printf("  gradient disk2 @ 320x240: %.3f ms/frame (incl. upload+readback)\n",
+                msEach);
+
+    std::printf("filter selftest: %s (%d/%zu cases mismatched)\n",
+                fails == 0 ? "PASS" : "FAIL", fails, cases.size());
+    return fails == 0 ? 0 : 1;
+}
+#endif  // VILLEN_FILTER_GPU
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -43,6 +138,7 @@ int main(int argc, char** argv) {
     int screenshotDelayMs = -1;
     const char* screenshotPath = nullptr;
     const char* engineName = nullptr;  // --engine: boot straight into this one
+    bool filterSelfTest = false;       // --filter-selftest: GPU vs CPU, then exit
 #ifdef VILLEN_DEFAULT_CLIENT_DIR
     std::string clientDir = VILLEN_DEFAULT_CLIENT_DIR;
 #else
@@ -57,10 +153,21 @@ int main(int argc, char** argv) {
             engineName = argv[++i];
         else if (std::strcmp(argv[i], "--headless") == 0)
             headless = true;
+        else if (std::strcmp(argv[i], "--filter-selftest") == 0)
+            filterSelfTest = true;
         else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             screenshotPath = argv[++i];
             screenshotDelayMs = 2500;  // settle, let a test client connect/move
         }
+    }
+
+    if (filterSelfTest) {
+#ifdef VILLEN_FILTER_GPU
+        return runFilterSelfTest();  // validate the APU path; no server needed
+#else
+        std::fprintf(stderr, "villen: built without the filter GPU backend\n");
+        return 2;
+#endif
     }
 
     villen::net::WsServer ws;

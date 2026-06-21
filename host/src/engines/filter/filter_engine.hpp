@@ -22,10 +22,18 @@
 #include "engine.hpp"
 #include "villen/filter/pipeline.hpp"
 
+#ifdef VILLEN_FILTER_GPU
+#include <memory>
+
+#include "gpu_backend.hpp"
+#endif
+
 namespace villen {
 
 class FilterEngine : public IEngine {
  public:
+    FilterEngine();  // probes the GPU backend; logs the renderer (§4.1)
+
     SeatRoster seats() const override { return {}; }  // no seats: a feed owns no seat (§7)
 
     void onJoin(Room&, ConnId, SeatId) override;   // push the current filterConfig
@@ -55,6 +63,10 @@ class FilterEngine : public IEngine {
 
     // Process one feed's pending frame end to end and reply to `id`.
     void processFeed(Room&, ConnId id, Feed&, std::uint64_t nowMs);
+    // Run the current pipeline on a frame: the GPU backend when it is real APU
+    // hardware, else the CPU reference (degrade, don't fail, §4.1).
+    filter::Image runPipeline(const filter::Image& in);
+    const char* backendLabel() const;  // for statusLine / drawAdmin (§8)
     // The server-authoritative filterConfig text (§5.2) for the current pipeline.
     std::string configMsg() const;
     // Re-push the config to every feed after an operator/preset edit (§8). Uses
@@ -66,6 +78,10 @@ class FilterEngine : public IEngine {
 
     // Capture/encode parameters the client is told to honour (§5.2).
     int outW_ = 320, outH_ = 240, quality_ = 70;
+
+#ifdef VILLEN_FILTER_GPU
+    std::unique_ptr<GpuBackend> gpu_;  // null when no render node / EGL (§4.1)
+#endif
 
     static filter::Pipeline defaultPipeline();  // gradient, disk r2 (§5.2 example)
 };

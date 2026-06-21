@@ -342,6 +342,12 @@ bool runAdminLoop(Host& host, net::WsServer& ws,
         ws.poll(0);     // drain the network on the SAME thread as the UI (§5)
         host.tick(nowMs());  // advance real-time engines (filter, snake) per frame
 
+        // A real-time engine may have made its own GL context current this tick
+        // (filter's surfaceless-EGL compute context, §6). Re-bind the admin SDL
+        // context before ImGui renders, so the two contexts share one thread
+        // cleanly.
+        SDL_GL_MakeCurrent(win, gl);
+
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
