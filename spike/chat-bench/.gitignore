@@ -1,0 +1,5 @@
+# Run output produced on the Deck (or in self-test) — not source.
+bench-logs/
+results-*.json
+results-*.md
+__pycache__/

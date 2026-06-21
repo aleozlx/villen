@@ -1,0 +1,130 @@
+/* Villen chat client (DESIGN-chat §10). Dark, minimal, single-column. Plain CSS,
+   no build step. The streaming bubble shows a blinking caret while generating. */
+:root {
+  --bg: #15171c;
+  --panel: #1e2128;
+  --ink: #e6e8ee;
+  --dim: #8b93a3;
+  --accent: #5b9cff;
+  --user: #2a3550;
+  --assistant: #232730;
+  --error: #4a2326;
+  --border: #2c303a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+header .title { font-weight: 600; letter-spacing: 0.2px; }
+header .dim, .dim { color: var(--dim); font-weight: 400; }
+header .meta { display: flex; gap: 14px; align-items: center; font-size: 13px; }
+.model { color: var(--accent); font-variant: tabular-nums; }
+.status { color: var(--dim); }
+.status.ok { color: #57c98a; }
+.status.bad { color: #e0796f; }
+
+main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  max-width: min(72ch, 88%);
+  padding: 9px 13px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: var(--user);
+  border-bottom-right-radius: 4px;
+}
+.bubble.assistant {
+  align-self: flex-start;
+  background: var(--assistant);
+  border-bottom-left-radius: 4px;
+}
+.bubble.error {
+  align-self: center;
+  background: var(--error);
+  color: #f2c9c4;
+  font-size: 13px;
+}
+
+/* Blinking caret while a reply streams in. */
+.bubble.streaming::after {
+  content: "▌";
+  color: var(--accent);
+  animation: blink 1s steps(2, start) infinite;
+  margin-left: 1px;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.tokmeta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dim);
+  font-variant: tabular-nums;
+}
+
+footer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+textarea#input {
+  flex: 1;
+  resize: none;
+  min-height: 38px;
+  max-height: 160px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+textarea#input:focus { outline: none; border-color: var(--accent); }
+
+button {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+#send { background: var(--accent); border-color: var(--accent); color: #0b1220; font-weight: 600; }

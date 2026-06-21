@@ -37,11 +37,15 @@ slot.
 
 ## Build
 ```bash
-# Engine + tests only (headless, no SDL2/GL — what CI runs):
+# Engine + tests only (headless, no SDL2/GL — fast inner loop for engine work):
 cmake -S . -B build -DVILLEN_BUILD_HOST=OFF && cmake --build build && ctest --test-dir build
-# Full host (needs SDL2 + OpenGL; admin UI's ImGui is a submodule):
+# Full host (needs SDL2 + OpenGL; admin UI's ImGui is a submodule). THIS is what CI
+# builds — on gcc AND clang — and tests, so it's the config that gates merges; it
+# compiles all host code (engine adapters, chat backend) and runs every ctest suite
+# (engine_tests, chat_tests, integration_tests). The headless line above is only a
+# dev shortcut and does NOT cover host/ code.
 git submodule update --init third_party/imgui   # once, if not cloned --recursive
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build && ctest --test-dir build
 ```
 
 ## Layout
@@ -81,7 +85,10 @@ need the cross-build-and-copy dance above.
   the body on its own line** — no unbraced guard clauses or early returns, and no
   packing it onto the condition line (`if (x) { stmt; }`); `else if` chains stay
   flat (write `else if (...) { }`, not an extra outer brace layer). Guards against
-  the `goto fail;`-class bug and keeps later diffs safe.
+  the `goto fail;`-class bug and keeps later diffs safe. The checked-in
+  `.clang-format` enforces this (and the rest of the house style); run
+  `clang-format -i` on files you add, but don't bulk-reformat pre-existing files.
+  See [`docs/CODE-REVIEW.md`](docs/CODE-REVIEW.md) for the dev-binary setup.
 - **Do not commit local infrastructure details** (personal IPs, hostnames,
   account names, keys). Generic Steam Deck / SteamOS facts are fine.
 

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<!--
+  Villen chat client (DESIGN-chat §10). Plain HTML/CSS/ES-modules, no build step
+  (CLAUDE.md). Streams a reply token by token from the local model on the LAN —
+  nothing leaves the LAN (§11). Served at /chat/; reuses the host's text WS
+  transport (../src/net.js, resolved by the browser to /src/net.js).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Villen · chat</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="title">Villen <span class="dim">· chat</span></div>
+      <div class="meta">
+        <span id="model" class="model">connecting…</span>
+        <span id="status" class="status">…</span>
+      </div>
+    </header>
+
+    <main id="log" aria-live="polite"></main>
+
+    <footer>
+      <button id="new" title="New conversation">New</button>
+      <textarea id="input" rows="1" placeholder="Message the model…  (Enter to send)"></textarea>
+      <button id="send">Send</button>
+      <button id="stop" title="Stop generating">Stop</button>
+    </footer>
+
+    <script type="module" src="chat.js"></script>
+  </body>
+</html>

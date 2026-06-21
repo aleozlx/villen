@@ -14,13 +14,16 @@ add_executable(villen
     src/room.cpp
     src/host.cpp
     src/engines/chess/chess_engine.cpp
+    src/engines/chat/chat_engine.cpp
+    src/llama_client.cpp
+    src/llama_process.cpp
 )
 # src/ on the include path so engines under src/engines/<name>/ can include the
 # framework headers (engine.hpp, room.hpp, …) by their plain names.
 target_include_directories(villen PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(villen PRIVATE villen::engine)
+target_link_libraries(villen PRIVATE villen::engine villen::chat)
 target_compile_features(villen PRIVATE cxx_std_17)
 
 # Dev convenience: serve the browser client straight from the source tree unless
@@ -53,9 +56,12 @@ if(SDL2_FOUND AND OpenGL_FOUND)
         ${IMGUI_DIR}/imgui_widgets.cpp
         ${IMGUI_DIR}/backends/imgui_impl_sdl2.cpp
         ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+        # std::string-backed InputText helpers — the chat console's growable
+        # system-prompt editor (DESIGN-chat §9) binds straight to a std::string.
+        ${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp
     )
     target_include_directories(imgui PUBLIC
-        ${IMGUI_DIR} ${IMGUI_DIR}/backends)
+        ${IMGUI_DIR} ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp)
     target_link_libraries(imgui PUBLIC SDL2::SDL2 OpenGL::GL)
 
     # Vendored QR generator (Nayuki, MIT) for the join-URL panel.

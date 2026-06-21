@@ -18,6 +18,7 @@
 #include <memory>
 #include <vector>
 
+#include "engines/chat/chat_engine.hpp"
 #include "engines/chess/chess_engine.hpp"
 #include "host.hpp"
 #include "net_util.hpp"
@@ -29,6 +30,12 @@
 namespace {
 volatile std::sig_atomic_t g_running = 1;
 void onSignal(int) { g_running = 0; }
+
+// SIGUSR1 = "switch to the next model" — a headless operator control for chat (the
+// Game-Mode operator uses the admin combo instead). Handled in the main loop, not
+// here, so it stays async-signal-safe (just sets a flag).
+volatile std::sig_atomic_t g_cycleModel = 0;
+void onCycleModel(int) { g_cycleModel = 1; }
 
 std::uint64_t nowMs() {
     using namespace std::chrono;
@@ -43,6 +50,7 @@ int main(int argc, char** argv) {
     int screenshotDelayMs = -1;
     const char* screenshotPath = nullptr;
     const char* engineName = nullptr;  // --engine: boot straight into this one
+    villen::ChatBackendConfig chatCfg;  // --engine chat backend (DESIGN-chat §3.A)
 #ifdef VILLEN_DEFAULT_CLIENT_DIR
     std::string clientDir = VILLEN_DEFAULT_CLIENT_DIR;
 #else
@@ -57,7 +65,38 @@ int main(int argc, char** argv) {
             engineName = argv[++i];
         else if (std::strcmp(argv[i], "--headless") == 0)
             headless = true;
-        else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
+        else if (std::strcmp(argv[i], "--llama-url") == 0 && i + 1 < argc) {
+            // HOST:PORT of a running (or stubbed) llama-server for --engine chat.
+            std::string url = argv[++i];
+            auto colon = url.rfind(':');
+            if (colon != std::string::npos) {
+                chatCfg.llamaHost = url.substr(0, colon);
+                chatCfg.llamaPort = std::atoi(url.c_str() + colon + 1);
+            }
+        } else if (std::strcmp(argv[i], "--chat-stub") == 0) {
+            chatCfg.stub = true;  // in-host echo generator, no inference (dev/CI)
+        } else if (std::strcmp(argv[i], "--llama-bin") == 0 && i + 1 < argc) {
+            chatCfg.llamaBin = argv[++i];  // spawn & manage this llama-server (§3.A)
+        } else if (std::strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
+            chatCfg.model = argv[++i];     // -m GGUF for the spawned server (§11)
+        } else if (std::strcmp(argv[i], "--model-path") == 0 && i + 1 < argc) {
+            // id=path: register a switchable model for the admin console (§9). The
+            // operator supplies the weights (§11); repeat for each model.
+            std::string spec = argv[++i];
+            auto eq = spec.find('=');
+            if (eq != std::string::npos && eq > 0 && eq + 1 < spec.size()) {
+                chatCfg.modelPaths.emplace_back(spec.substr(0, eq), spec.substr(eq + 1));
+            } else {
+                std::fprintf(stderr, "villen: --model-path expects id=path, got '%s'\n",
+                             spec.c_str());
+            }
+        } else if (std::strcmp(argv[i], "--models-dir") == 0 && i + 1 < argc) {
+            chatCfg.modelsDir = argv[++i]; // scan for switchable GGUFs (§5)
+        } else if (std::strcmp(argv[i], "--llama-ngl") == 0 && i + 1 < argc) {
+            chatCfg.ngl = std::atoi(argv[++i]);       // GPU layers (§6)
+        } else if (std::strcmp(argv[i], "--llama-parallel") == 0 && i + 1 < argc) {
+            chatCfg.parallel = std::atoi(argv[++i]);  // concurrent slots (§8)
+        } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             screenshotPath = argv[++i];
             screenshotDelayMs = 2500;  // settle, let a test client connect/move
         }
@@ -74,6 +113,7 @@ int main(int argc, char** argv) {
     // launcher will list whatever is here (DESIGN-admin-shell §2).
     std::vector<std::unique_ptr<villen::IEngineFactory>> engines;
     engines.push_back(std::make_unique<villen::ChessFactory>());
+    engines.push_back(std::make_unique<villen::ChatFactory>(chatCfg));
 
     villen::Host host(ws, std::move(engines));
 
@@ -104,6 +144,7 @@ int main(int argc, char** argv) {
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
+    std::signal(SIGUSR1, onCycleModel);  // `kill -USR1` cycles the chat model (headless)
 
     std::printf("Villen server listening — players open in a browser:\n");
     auto ips = villen::net::localIpv4Addresses();
@@ -132,8 +173,21 @@ int main(int argc, char** argv) {
     // Headless (or the admin window was unavailable): there is no launcher, so an
     // engine must be running. Start the default if nothing is active yet.
     if (!host.running()) host.startEngine(startIndex);
+    std::vector<int> pollFds;  // engine fds folded into the wait set each iteration
     while (g_running) {
-        ws.poll(100);
+        if (g_cycleModel) {
+            g_cycleModel = 0;
+            // Chat-specific operator action; other engines have no model to cycle.
+            if (auto* chat = dynamic_cast<villen::ChatEngine*>(host.active())) {
+                chat->cycleModel();
+            }
+        }
+        // Fold the active engine's fds (a streaming inference socket) into poll so
+        // an inbound token ends the 100ms block at once and the tick drains it —
+        // without this the loop only checks the socket on the next timeout.
+        pollFds.clear();
+        host.collectPollFds(pollFds);
+        ws.poll(100, pollFds);
         host.tick(nowMs());
     }
 
