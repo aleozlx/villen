@@ -10,11 +10,11 @@
 
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
+#include "host.hpp"
 #include "imgui.h"
 #include "net_util.hpp"
 #include "qrcodegen/qrcodegen.hpp"
-#include "session.hpp"
-#include "villen/chess/position.hpp"
+#include "room.hpp"
 #include "ws_server.hpp"
 
 namespace villen::admin {
@@ -56,46 +56,45 @@ void seatCell(const char* label, const char* status) {
     ImGui::TextColored(col, "%s: %s", label, status);
 }
 
-void drawAdmin(GameServer& game, net::WsServer& ws, const std::string& joinUrl) {
-    const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->WorkPos);
-    ImGui::SetNextWindowSize(vp->WorkSize);
-    ImGui::Begin("Villen", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+// The shell's generic chrome around an engine: the seat roster (read straight
+// from Room's membership, no game knowledge) with a per-seat Free control, the
+// join QR, and the live connection count. The engine fills only its own body via
+// drawAdmin() (admin-shell §8).
+void drawEngineView(Host& host, net::WsServer& ws, const std::string& joinUrl) {
+    Room* room = host.room();
 
-    // The default ImGui font is ASCII-only, so keep admin strings ASCII.
-    ImGui::TextUnformatted("Villen - host");
+    ImGui::Text("Villen - host  [engine: %s]", host.engineName(host.activeIndex()));
     ImGui::Separator();
     ImGui::Spacing();
 
-    const chess::Position& pos = game.position();
-    const char* status = chess::statusName(pos.status());
-    const char* turn = pos.sideToMove() == chess::Color::White ? "white" : "black";
-
-    ImGui::SeparatorText("Sessions");
-    if (ImGui::BeginTable("sessions", 4,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-        ImGui::TableSetupColumn("Session");
-        ImGui::TableSetupColumn("Status");
-        ImGui::TableSetupColumn("Turn");
-        ImGui::TableSetupColumn("Seats");
+    ImGui::SeparatorText("Seats");
+    if (room && ImGui::BeginTable("seats", 2,
+                                  ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn("Seat");
+        ImGui::TableSetupColumn("");
         ImGui::TableHeadersRow();
-
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted(game.sessionName().c_str());
-        ImGui::TableSetColumnIndex(1);
-        ImGui::TextUnformatted(status);
-        ImGui::TableSetColumnIndex(2);
-        ImGui::TextUnformatted(turn);
-        ImGui::TableSetColumnIndex(3);
-        seatCell("W", game.whiteSeatStatus());
-        ImGui::SameLine();
-        seatCell("B", game.blackSeatStatus());
+        const SeatRoster& roster = room->roster();
+        for (SeatId s = 0; s < static_cast<SeatId>(roster.names.size()); ++s) {
+            const char* status = room->seatStatus(s);
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            seatCell(roster.names[s].c_str(), status);
+            ImGui::TableSetColumnIndex(1);
+            // Re-issue a seat (DESIGN §13 #1): release it so someone can rejoin.
+            // Disabled when already open. ImGui needs unique ids per button.
+            const bool open = std::strcmp(status, "open") == 0;
+            ImGui::BeginDisabled(open);
+            ImGui::PushID(s);
+            if (ImGui::Button("Free")) room->freeSeat(s);
+            ImGui::PopID();
+            ImGui::EndDisabled();
+        }
         ImGui::EndTable();
     }
+
+    ImGui::Spacing();
+    ImGui::SeparatorText("Engine");
+    if (IEngine* engine = host.active()) engine->drawAdmin();
 
     ImGui::Spacing();
     ImGui::SeparatorText("Join");
@@ -106,25 +105,23 @@ void drawAdmin(GameServer& game, net::WsServer& ws, const std::string& joinUrl) 
     drawQr(joinUrl, 6.0f);
 
     ImGui::Spacing();
-    ImGui::SeparatorText("Admin");
-    if (ImGui::Button("New game")) game.reset();
-
-    // Re-issue a seat (DESIGN §13 #1): release a seat — typically one a
-    // disconnected player left held — so someone can rejoin it. Disabled when the
-    // seat is already open. Gamepad-navigable like every other admin control.
-    const bool whiteOpen = std::strcmp(game.whiteSeatStatus(), "open") == 0;
-    const bool blackOpen = std::strcmp(game.blackSeatStatus(), "open") == 0;
-    ImGui::SameLine();
-    ImGui::BeginDisabled(whiteOpen);
-    if (ImGui::Button("Free White")) game.freeSeat(chess::Color::White);
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    ImGui::BeginDisabled(blackOpen);
-    if (ImGui::Button("Free Black")) game.freeSeat(chess::Color::Black);
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
     ImGui::Text("live connections: %zu", ws.connectionCount());
+}
+
+void drawShell(Host& host, net::WsServer& ws, const std::string& joinUrl) {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->WorkPos);
+    ImGui::SetNextWindowSize(vp->WorkSize);
+    ImGui::Begin("Villen", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+    // The default ImGui font is ASCII-only, so keep admin strings ASCII.
+    if (host.running())
+        drawEngineView(host, ws, joinUrl);
+    else
+        ImGui::TextUnformatted("Villen - host (no engine running)");
 
     ImGui::End();
 }
@@ -144,7 +141,7 @@ void writePpm(const char* path, int w, int h) {
 
 }  // namespace
 
-bool runAdminLoop(GameServer& game, net::WsServer& ws,
+bool runAdminLoop(Host& host, net::WsServer& ws,
                   const volatile std::sig_atomic_t* running, int screenshotDelayMs,
                   const char* screenshotPath) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
@@ -179,7 +176,7 @@ bool runAdminLoop(GameServer& game, net::WsServer& ws,
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;  // no imgui.ini on the Deck
-    // Gamepad + keyboard navigation: D-pad through the panel, A to act (§8).
+    // Gamepad + keyboard navigation: D-pad through the panel, A to act.
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad |
                       ImGuiConfigFlags_NavEnableKeyboard;
     ImGui::StyleColorsDark();
@@ -187,8 +184,8 @@ bool runAdminLoop(GameServer& game, net::WsServer& ws,
     ImGui_ImplOpenGL3_Init("#version 130");
 
     auto ips = villen::net::localIpv4Addresses();
-    std::string host = ips.empty() ? "localhost" : ips[0];
-    std::string joinUrl = "http://" + host + ":" + std::to_string(ws.port());
+    std::string hostIp = ips.empty() ? "localhost" : ips[0];
+    std::string joinUrl = "http://" + hostIp + ":" + std::to_string(ws.port());
 
     bool done = false;
     const Uint32 start = SDL_GetTicks();
@@ -208,7 +205,7 @@ bool runAdminLoop(GameServer& game, net::WsServer& ws,
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-        drawAdmin(game, ws, joinUrl);
+        drawShell(host, ws, joinUrl);
         ImGui::Render();
 
         int w, h;

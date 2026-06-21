@@ -1,17 +1,25 @@
 // Villen host — entry point and the single main loop (DESIGN §5).
 //
-// One thread. Each iteration drains the network (ws.poll -> mutate session
-// state) and, once the admin UI lands in step 7, renders an ImGui frame from the
-// same state. No locks, no worker threads: a chess server's throughput makes a
-// cooperative poll trivially sufficient.
+// One thread. Each iteration drains the network (ws.poll -> the active engine
+// mutates its state) and ticks the active engine; with a display it instead runs
+// the in-process ImGui admin loop, which pumps the same poll on the same thread.
+// No locks, no worker threads (DESIGN §5).
+//
+// The host carries several engines as factories and runs ONE at a time
+// (DESIGN-game-framework §1). With `--engine NAME` it boots straight into that
+// engine (kiosk / headless / CI); the launcher UI lands in a follow-up step.
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
+#include <vector>
 
+#include "engines/chess/chess_engine.hpp"
+#include "host.hpp"
 #include "net_util.hpp"
-#include "session.hpp"
 #include "ws_server.hpp"
 #ifdef VILLEN_ADMIN_UI
 #include "admin_ui.hpp"
@@ -20,6 +28,12 @@
 namespace {
 volatile std::sig_atomic_t g_running = 1;
 void onSignal(int) { g_running = 0; }
+
+std::uint64_t nowMs() {
+    using namespace std::chrono;
+    return static_cast<std::uint64_t>(
+        duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count());
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -27,6 +41,7 @@ int main(int argc, char** argv) {
     bool headless = false;
     int screenshotDelayMs = -1;
     const char* screenshotPath = nullptr;
+    const char* engineName = nullptr;  // --engine: boot straight into this one
 #ifdef VILLEN_DEFAULT_CLIENT_DIR
     std::string clientDir = VILLEN_DEFAULT_CLIENT_DIR;
 #else
@@ -37,6 +52,8 @@ int main(int argc, char** argv) {
             port = static_cast<std::uint16_t>(std::atoi(argv[++i]));
         else if (std::strcmp(argv[i], "--client-dir") == 0 && i + 1 < argc)
             clientDir = argv[++i];
+        else if (std::strcmp(argv[i], "--engine") == 0 && i + 1 < argc)
+            engineName = argv[++i];
         else if (std::strcmp(argv[i], "--headless") == 0)
             headless = true;
         else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
@@ -52,12 +69,29 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    villen::GameServer game(ws);
-    ws.setCallbacks({
-        [&](auto id) { game.onOpen(id); },
-        [&](auto id, std::string_view msg) { game.onMessage(id, msg); },
-        [&](auto id) { game.onClose(id); },
-    });
+    // Register the engines this binary carries. chess is the only one today; the
+    // launcher will list whatever is here (DESIGN-admin-shell §2).
+    std::vector<std::unique_ptr<villen::IEngineFactory>> engines;
+    engines.push_back(std::make_unique<villen::ChessFactory>());
+
+    villen::Host host(ws, std::move(engines));
+
+    // Resolve --engine to an index (default: the first engine).
+    std::size_t startIndex = 0;
+    if (engineName) {
+        bool found = false;
+        for (std::size_t i = 0; i < host.engineCount(); ++i)
+            if (std::strcmp(host.engineName(i), engineName) == 0) {
+                startIndex = i;
+                found = true;
+                break;
+            }
+        if (!found)
+            std::fprintf(stderr, "villen: unknown --engine '%s', using '%s'\n",
+                         engineName, host.engineName(0));
+    }
+    // Until the launcher UI lands, boot straight into the selected engine.
+    host.startEngine(startIndex);
 
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
@@ -72,10 +106,10 @@ int main(int argc, char** argv) {
 #ifdef VILLEN_ADMIN_UI
     // Only attempt the admin window when a display server is actually present
     // (the Deck in Game Mode has one); otherwise SDL would stall probing for one
-    // on a headless box. The window loop pumps ws.poll() itself (§5).
+    // on a headless box. The window loop pumps ws.poll() + host.tick() itself.
     bool hasDisplay = std::getenv("DISPLAY") || std::getenv("WAYLAND_DISPLAY");
     if (!headless && hasDisplay &&
-        villen::admin::runAdminLoop(game, ws, &g_running, screenshotDelayMs,
+        villen::admin::runAdminLoop(host, ws, &g_running, screenshotDelayMs,
                                     screenshotPath)) {
         std::printf("\nvillen: shutting down\n");
         return 0;
@@ -87,7 +121,10 @@ int main(int argc, char** argv) {
     (void)screenshotPath;
 #endif
 
-    while (g_running) ws.poll(100);
+    while (g_running) {
+        ws.poll(100);
+        host.tick(nowMs());
+    }
 
     std::printf("\nvillen: shutting down\n");
     return 0;
