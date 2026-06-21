@@ -65,6 +65,11 @@ def backing_device(path):
                 if len(parts) < 3:
                     continue
                 dev, mnt, fstype = parts[0], parts[1], parts[2]
+                # /proc/mounts octal-escapes space/tab/newline/backslash in paths
+                # (e.g. an SD-card label with a space). Unescape just those four —
+                # not via 'unicode-escape', which would mangle raw UTF-8 path bytes.
+                for esc, ch in (("\\040", " "), ("\\011", "\t"), ("\\012", "\n"), ("\\134", "\\")):
+                    mnt = mnt.replace(esc, ch)
                 if (ap == mnt or ap.startswith(mnt.rstrip("/") + "/")) and len(mnt) >= len(best[2]):
                     best = (dev, fstype, mnt)
     except OSError:
@@ -84,8 +89,7 @@ def make_test_file(path, size_bytes):
     try:
         while written < size_bytes:
             n = min(len(block), size_bytes - written)
-            os.write(fd, block[:n])
-            written += n
+            written += os.write(fd, block[:n])  # os.write may write fewer bytes
         os.fsync(fd)
     finally:
         os.close(fd)
@@ -121,7 +125,6 @@ def read_once(path, bs, evict_first):
 
 def bench_path(path, size_bytes, bs, reps, gguf_bytes, keep, given_file):
     """Create-or-reuse a test file at `path`, then time cold and warm reads."""
-    is_dir = os.path.isdir(path)
     testfile = path if given_file else os.path.join(path, ".diskbench-testfile.bin")
     dev, fstype = backing_device(testfile)
     write_s = None
@@ -187,6 +190,15 @@ def main():
     ap.add_argument("--self-test", action="store_true",
                     help="run a tiny /tmp benchmark to verify the harness on a PC")
     args = ap.parse_args()
+
+    if args.reps < 1:
+        ap.error("--reps must be at least 1")
+    if args.size_mb < 1:
+        ap.error("--size-mb must be at least 1")
+    if args.bs_kb < 1:
+        ap.error("--bs-kb must be at least 1")
+    if args.gguf_gb <= 0:
+        ap.error("--gguf-gb must be greater than 0")
 
     if args.self_test:
         args.path = ["/tmp"]
