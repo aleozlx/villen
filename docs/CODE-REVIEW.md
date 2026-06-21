@@ -69,12 +69,13 @@ These are load-bearing. A change that breaks one is blocking, however small.
 ## Style rules
 
 - **Always brace the body of `if` / `else` / `for` / `while` / `do`, even when it
-  is a single statement** — no unbraced guard clauses or early returns. The one
-  exception is the standard `else if` chain: write `else if (cond) { ... }`, not
-  `else { if (cond) { ... } }` — no extra outer brace layer. This prevents the
-  `goto fail;`-class bug (a second statement silently falling outside the
-  conditional), keeps later diffs minimal and safe when a branch grows, and makes
-  every control-flow body visually uniform.
+  is a single statement, and put that body on its own line** — no unbraced guard
+  clauses or early returns, and no packing the statement onto the condition line
+  (`if (x) { stmt; }`). The one exception is the standard `else if` chain: write
+  `else if (cond) { ... }`, not `else { if (cond) { ... } }` — no extra outer
+  brace layer. This prevents the `goto fail;`-class bug (a second statement
+  silently falling outside the conditional), keeps later diffs minimal and safe
+  when a branch grows, and makes every control-flow body visually uniform.
 
   ```cpp
   // Bad — unbraced single statements
@@ -84,6 +85,9 @@ These are load-bearing. A change that breaks one is blocking, however small.
       send(msg);
   else
       reject();
+
+  // Bad — braced but packed onto the condition line
+  if (fd_ < 0) { return false; }
 
   // Good
   if (fd_ < 0) {

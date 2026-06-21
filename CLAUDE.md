@@ -81,13 +81,14 @@ need the cross-build-and-copy dance above.
 - Keep the **engine pure** (no graphics/socket/device code) and all network
   concerns on the player WebSocket edge (DESIGN §9).
 - C++17, "C with destructors" style: flat, allocation-visible, RAII for handles.
-- **Brace every `if`/`else`/`for`/`while`/`do` body, even a single statement** — no
-  unbraced guard clauses or early returns (`else if` chains stay flat: write
-  `else if (...) { }`, not an extra outer brace layer). Guards against the
-  `goto fail;`-class bug and keeps later diffs safe. The checked-in `.clang-format`
-  enforces this (and the rest of the house style); run `clang-format -i` on files
-  you add, but don't bulk-reformat pre-existing files. See
-  [`docs/CODE-REVIEW.md`](docs/CODE-REVIEW.md) for the dev-binary setup.
+- **Brace every `if`/`else`/`for`/`while`/`do` body, even a single statement, with
+  the body on its own line** — no unbraced guard clauses or early returns, and no
+  packing it onto the condition line (`if (x) { stmt; }`); `else if` chains stay
+  flat (write `else if (...) { }`, not an extra outer brace layer). Guards against
+  the `goto fail;`-class bug and keeps later diffs safe. The checked-in
+  `.clang-format` enforces this (and the rest of the house style); run
+  `clang-format -i` on files you add, but don't bulk-reformat pre-existing files.
+  See [`docs/CODE-REVIEW.md`](docs/CODE-REVIEW.md) for the dev-binary setup.
 - **Do not commit local infrastructure details** (personal IPs, hostnames,
   account names, keys). Generic Steam Deck / SteamOS facts are fine.
 
