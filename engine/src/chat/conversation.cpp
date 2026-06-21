@@ -39,8 +39,12 @@ void Conversation::reset(bool clearSystem) {
 std::vector<Turn> Conversation::messages() const {
     std::vector<Turn> out;
     out.reserve(turns_.size() + 1);
-    if (hasSystem()) out.push_back({Role::System, system_});
-    for (const auto& t : turns_) out.push_back(t);
+    if (hasSystem()) {
+        out.push_back({Role::System, system_});
+    }
+    for (const auto& t : turns_) {
+        out.push_back(t);
+    }
     return out;
 }
 
@@ -50,16 +54,23 @@ std::size_t Conversation::estimateTokens(std::string_view text) {
 
 std::size_t Conversation::estimatedTokens() const {
     std::size_t total = 0;
-    if (hasSystem()) total += estimateTokens(system_) + kPerMessageOverhead;
-    for (const auto& t : turns_)
+    if (hasSystem()) {
+        total += estimateTokens(system_) + kPerMessageOverhead;
+    }
+    for (const auto& t : turns_) {
         total += estimateTokens(t.content) + kPerMessageOverhead;
+    }
     return total;
 }
 
 std::size_t Conversation::capToTokens(std::size_t budget) {
     std::size_t dropped = 0;
+    // Track the running estimate and decrement as we erase, so the whole pass is
+    // O(N) rather than recomputing estimatedTokens() each iteration (O(N^2)).
     // Trim oldest dialogue turns, but never the most recent (the live query).
-    while (turns_.size() > 1 && estimatedTokens() > budget) {
+    std::size_t total = estimatedTokens();
+    while (turns_.size() > 1 && total > budget) {
+        total -= estimateTokens(turns_.front().content) + kPerMessageOverhead;
         turns_.erase(turns_.begin());
         ++dropped;
     }
@@ -69,6 +80,7 @@ std::size_t Conversation::capToTokens(std::size_t budget) {
     // cleanup of our own trimming: a within-budget conversation is left untouched.
     if (dropped > 0) {
         while (turns_.size() > 1 && turns_.front().role == Role::Assistant) {
+            total -= estimateTokens(turns_.front().content) + kPerMessageOverhead;
             turns_.erase(turns_.begin());
             ++dropped;
         }

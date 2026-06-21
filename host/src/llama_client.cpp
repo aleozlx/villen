@@ -134,6 +134,8 @@ void LlamaClient::serviceWrite(Req& r) {
         ssize_t n = ::send(r.fd, r.outbuf.data(), r.outbuf.size(), MSG_NOSIGNAL);
         if (n > 0) {
             r.outbuf.erase(0, static_cast<std::size_t>(n));
+        } else if (n < 0 && errno == EINTR) {
+            continue;  // interrupted by a signal before sending; retry, don't fail
         } else if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             return;  // socket buffer full; finish next pump
         } else {
@@ -159,6 +161,8 @@ void LlamaClient::serviceRead(Req& r) {
             }
             if (!r.finished) fail(r, "backend_down");  // closed before a clean end
             return;
+        } else if (n < 0 && errno == EINTR) {
+            continue;  // interrupted by a signal; retry the read, don't fail
         } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return;  // drained for now
         } else {
