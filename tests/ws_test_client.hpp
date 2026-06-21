@@ -35,6 +35,7 @@ class WsClient {
     // Connect to 127.0.0.1:port and complete the WebSocket upgrade. Returns false
     // on any socket or handshake failure.
     bool connect(std::uint16_t port) {
+        disconnect();  // close any prior socket so a re-connect can't leak the fd
         fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
         if (fd_ < 0) return false;
 
@@ -201,6 +202,10 @@ class WsClient {
             for (int i = 0; i < 8; ++i) len = (len << 8) | byte(2 + i);
             off = 10;
         }
+        // len is read straight off the wire; cap it (the server's own 1 MiB
+        // limit) so a corrupt/oversized length can't overflow off + maskLen + len
+        // and slip past the ensure() bounds check below into an OOB mask loop.
+        if (len > (1u << 20)) return false;
         const std::size_t maskLen = masked ? 4 : 0;
         if (!ensure(off + maskLen + len, timeoutMs)) return false;
 

@@ -83,21 +83,29 @@ std::vector<json> parseAll(const std::vector<std::string>& raw) {
     return out;
 }
 
+// The string "type" of a message, or "" if absent or not a string. Type-checked
+// via find()/is_string() rather than value()'d so a wrong-typed "type" key yields
+// "" instead of throwing — the exception-free JSON discipline the rest of the
+// codebase follows (envelope.cpp, chess_engine.cpp's strField).
+std::string msgType(const json& m) {
+    if (!m.is_object()) return {};
+    auto it = m.find("type");
+    return (it != m.end() && it->is_string()) ? it->get<std::string>() : std::string{};
+}
+
 // The first message of `type`, returned BY VALUE (a null json if none). By value
 // on purpose: callers routinely inline `firstOfType(parseAll(c->drain()), ...)`,
 // and a pointer would dangle into that temporary vector the moment the statement
-// ends. All server messages carry a string "type"; value() is safe on this
-// trusted output (it throws only on a wrong-typed key, which the server never
-// emits).
+// ends.
 json firstOfType(const std::vector<json>& msgs, const char* type) {
     for (const auto& m : msgs)
-        if (m.is_object() && m.value("type", std::string{}) == type) return m;
+        if (msgType(m) == type) return m;
     return json{};  // null
 }
 
 bool hasType(const std::vector<json>& msgs, const char* type) {
     for (const auto& m : msgs)
-        if (m.is_object() && m.value("type", std::string{}) == type) return true;
+        if (msgType(m) == type) return true;
     return false;
 }
 
