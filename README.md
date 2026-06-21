@@ -78,20 +78,21 @@ the network and the UI on one thread, so there is no shared-state locking
 The in-process admin UI (session/seat table, join URL + QR), reflecting a player
 connected over WebSocket on the same thread:
 
-![Villen admin UI](docs/admin-ui.png)
+> **[TODO]** screenshot of the in-process admin UI — the previous one went stale
+> quickly; capture a fresh one from the Deck and drop it back in here.
 
 ## Engines
 
-The slot is game-agnostic, so chess is only the first occupant. **`filter` and
-`chat` are built and running on the Steam Deck** (✅); `snake`/`canvas`/`jam` are
-still **design drafts** (📝) — each chosen to stress a *different* axis of the
-architecture. See [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md)
-for the full rationale, coverage matrix, and the "pick by axis, not by app"
-selection method.
+The slot is game-agnostic, so chess is only the first occupant. The table starts
+with the **built** engines — chess (the reference spine), plus `filter` and `chat`
+now running on the Steam Deck (✅) — and descends into the **design drafts** (📝),
+each chosen to stress a *different* axis of the architecture. See
+[`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md) for the full
+rationale, coverage matrix, and the "pick by axis, not by app" selection method.
 
 | Engine | What it is | Axis it stresses |
 |---|---|---|
-| ✅ [`chess`](docs/DESIGN-villen.md) | the first engine — turn-based board (chess + fairy variants), seats, promotion, the attack heatmap | the baseline the `IEngine` slot generalizes from |
+| ✅ [`chess`](docs/DESIGN-villen.md) | the first engine and the reference: 2-seat turn-based board game, regular + fairy variants | the spine itself — authority, legality, turn order |
 | ✅ [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
 | ✅ [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
 | 📝 [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
