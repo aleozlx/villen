@@ -2,24 +2,54 @@
 
 [![CI](https://github.com/aleozlx/villen/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/aleozlx/villen/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Steam Deck](https://img.shields.io/badge/Steam_Deck-supported-1A9FFF?logo=steamdeck&logoColor=white)](docs/steamdeck-debugging.md)
 
 ![Villen — portable game server](rc/readme-banner-1280x320.png)
 
-> A portable **game server you carry** — a single native binary that runs the
-> authoritative game, hosts the session, and serves remote players from their own
-> browsers over the local network. No cloud, no accounts.
+A game server I carry in my packpack.
 
-Villen is a generic host for
-deterministic, turn-based, seat-based games. **Chess is the first game** built on
-it — chosen because its rules engine stresses the spine (legality, end states,
-turn order) without distractions. The engine is a swappable slot; the transport,
-session/seat model, admin UI, and dual-input player client know nothing about
-which game occupies it.
+## Quick start
 
-The name nods to a dragon of fantasy lore that lives disguised as an
+```bash
+git clone --recursive https://github.com/aleozlx/villen
+cd villen
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+./build/host/villen --port 9002
+```
+
+Then open `http://<host-ip>:9002` from another device on the same LAN. The admin
+window shows the join URL and QR code.
+
+See [Build](#build) for dependencies, submodule notes, test commands, and
+engine-only builds.
+
+## Motivation
+
+Run Villen on a Steam Deck or laptop, show a QR code, and nearby players join
+from their phones, tablets, or browsers. The native host owns the authoritative
+game state; clients only send input and render the game. No cloud, no accounts,
+no matchmaking service.
+
+![Villen compared with traditional remote-server game frameworks](docs/readme-frameworks-comparison.jpg)
+
+The name nods to a certain dragon of fantasy lore that lives disguised as an
 unremarkable traveler — fitting for a server that presents as an everyday
 handheld app and is something rarer underneath. See
 [`docs/DESIGN-villen.md`](docs/DESIGN-villen.md) for the full design.
+
+Most multiplayer stacks assume the server lives somewhere else: a cloud backend,
+a VPS, a desktop machine, or a home server. Villen treats the server as a
+physical object you bring with you.
+
+That makes it useful for demos, classrooms, conventions, board-game nights, LAN
+parties, cafés, and creator show-and-tell: “I built this. Scan this QR code and
+try it.”
+
+![Villen portable game server comic: build, pack, share, and play anywhere](docs/readme-portable-server-comic.jpg)
+
+Villen is not trying to be a full game engine, cloud backend, or matchmaking
+service. It is the local authoritative host for small multiplayer games.
 
 ## Architecture at a glance
 
@@ -32,9 +62,17 @@ that state directly — no admin socket, no IPC. Chess is the first engine, not
 the limit of the architecture.
 
 The only network boundary is **remote players' browsers**, speaking
-JSON-over-WebSocket. The admin UI *is* the server with a face. A single 60 Hz
-loop pumps the network and the UI on one thread, so there is no shared-state
-locking (DESIGN §5).
+JSON-over-WebSocket. The admin UI *is* the server with a face — an **operator**
+console, not something a game author programs against. A single 60 Hz loop pumps
+the network and the UI on one thread, so there is no shared-state locking
+(DESIGN §5).
+
+> **Where this is heading:** chess is compiled *into* the host today, but the
+> "engine slot" inverts — Villen becomes a **library a single game depends on**.
+> A future game (Snake, a card game, …) carries Villen as a submodule for rooms,
+> seats, and serving, and supplies only the rules + client against a small
+> `IGame` contract; one game type per binary, no IPC. See
+> [`docs/DESIGN-game-framework.md`](docs/DESIGN-game-framework.md).
 
 The in-process admin UI (session/seat table, join URL + QR), reflecting a player
 connected over WebSocket on the same thread:
@@ -70,8 +108,8 @@ forward-looking note on whether the appliance could patch its own minor bugs is 
 | `tests/`  | doctest suite (perft + special-rule coverage). |
 | `host/`   | The native binary: WS server + in-process ImGui admin UI. |
 | `client/` | Browser player client (pointer **and** gamepad input adapters). |
-| `docs/`   | Design & handoff doc, architecture diagram, Steam Deck debugging guide, art brief. |
-| `spike/`  | Throwaway Deck smoke-spike sources — slated to fold into the admin shell's **System Info** view ([`docs/DESIGN-admin-shell.md`](docs/DESIGN-admin-shell.md) §7). |
+| `docs/`   | Design & handoff docs — incl. the [game-framework contract](docs/DESIGN-game-framework.md) and the [engine roadmap](docs/DESIGN-engine-roadmap.md); architecture diagram, Steam Deck debugging guide, art brief. |
+| `spike/`  | Throwaway Deck smoke-spike sources, kept as the seed for the host's diagnostics view. |
 
 ## Build
 
@@ -124,31 +162,6 @@ can move with the mouse **or** a gamepad interchangeably.
 | `--port N` | TCP port for the player WebSocket + HTTP client (default 9002). |
 | `--headless` | Run the server loop without opening the admin window. |
 | `--client-dir DIR` | Serve the browser client from `DIR` (defaults to the source tree). |
-
-## MVP build order (DESIGN §11)
-
-- [x] **1.** Pure chess engine, standalone + unit tests (perft-validated)
-- [x] **2.** WebSocket server in a bare main loop (one hardcoded session)
-- [x] **3.** Browser player client, pointer input
-- [x] **4.** Gamepad adapter into the same move intake (architectural milestone, §7)
-- [x] **5.** Seats + two browsers, turn enforcement, rejection path
-- [x] **6.** Deck smoke spike *(on real hardware — see DESIGN §11.1; not buildable in CI)*
-- [x] **7.** ImGui admin shell in the same binary
-
-> **Transport note:** the design names µWebSockets as the player transport. The
-> server here is a small, self-contained RFC 6455 implementation driven by the
-> single main-loop `poll()` (DESIGN §5), kept behind a poll-shaped seam so µWS
-> can drop in later without touching the engine or session layers (§9.5).
-> Performance is a non-issue at LAN/chess message volume.
-
-## Beyond the MVP
-
-Increments past the load-bearing spine (DESIGN §13):
-
-- [x] **Reconnection & seat lifecycle** — a dropped player's seat is *held*
-  (`disconnected`) instead of vacated, so a mid-game drop never hands the side to
-  the opponent. Token-free recovery: a transient drop reclaims the seat by name,
-  or the host re-opens it from the admin UI's per-seat **Free** control (§13 #1).
 
 ## License
 
