@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#F0A34A">
+  <title id="title">Step sequencer and note</title>
+  <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  
+  <g class="s"><rect x="10" y="16" width="30" height="32" rx="4"/><path d="M20 16v32M30 16v32M10 27h30M10 38h30"/><path d="M48 18v22a6 6 0 1 1-4-5V23l10-3v17a6 6 0 1 1-4-5V18z"/></g><path class="a" d="M12 18h6v7h-6zM22 29h6v7h-6zM32 40h6v6h-6z"/>
+</svg>
