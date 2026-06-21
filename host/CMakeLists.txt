@@ -14,13 +14,14 @@ add_executable(villen
     src/room.cpp
     src/host.cpp
     src/engines/chess/chess_engine.cpp
+    src/engines/chat/chat_engine.cpp
 )
 # src/ on the include path so engines under src/engines/<name>/ can include the
 # framework headers (engine.hpp, room.hpp, …) by their plain names.
 target_include_directories(villen PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(villen PRIVATE villen::engine)
+target_link_libraries(villen PRIVATE villen::engine villen::chat)
 target_compile_features(villen PRIVATE cxx_std_17)
 
 # Dev convenience: serve the browser client straight from the source tree unless

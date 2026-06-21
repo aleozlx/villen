@@ -285,6 +285,7 @@ void WsServer::serveHttp(ConnId id, const std::string& request) {
     }
     if (auto q = path.find('?'); q != std::string::npos) path.resize(q);
     if (path.empty() || path == "/") path = "/index.html";
+    else if (path.back() == '/') path += "index.html";  // directory -> its index
     if (path.find("..") != std::string::npos) {  // refuse path traversal
         respond("400 Bad Request", "text/plain", "400\n");
         return;

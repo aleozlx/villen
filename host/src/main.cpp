@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "engines/chat/chat_engine.hpp"
 #include "engines/chess/chess_engine.hpp"
 #include "host.hpp"
 #include "net_util.hpp"
@@ -73,6 +74,7 @@ int main(int argc, char** argv) {
     // launcher will list whatever is here (DESIGN-admin-shell §2).
     std::vector<std::unique_ptr<villen::IEngineFactory>> engines;
     engines.push_back(std::make_unique<villen::ChessFactory>());
+    engines.push_back(std::make_unique<villen::ChatFactory>());
 
     villen::Host host(ws, std::move(engines));
 
