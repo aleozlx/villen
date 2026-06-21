@@ -10,10 +10,16 @@ add_executable(villen
     src/main.cpp
     src/ws_server.cpp
     src/net_util.cpp
-    src/protocol.cpp
-    src/session.cpp
+    src/envelope.cpp
+    src/room.cpp
+    src/host.cpp
+    src/engines/chess/chess_engine.cpp
 )
-target_include_directories(villen PRIVATE ${CMAKE_SOURCE_DIR}/third_party)
+# src/ on the include path so engines under src/engines/<name>/ can include the
+# framework headers (engine.hpp, room.hpp, …) by their plain names.
+target_include_directories(villen PRIVATE
+    ${CMAKE_SOURCE_DIR}/third_party
+    ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(villen PRIVATE villen::engine)
 target_compile_features(villen PRIVATE cxx_std_17)
 
