@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <thread>
@@ -26,8 +27,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include "engine.hpp"
 #include "engines/chess/chess_engine.hpp"
 #include "host.hpp"
+#include "room.hpp"
 #include "ws_server.hpp"
 #include "ws_test_client.hpp"
 
@@ -133,6 +136,44 @@ std::string placement(const json& state) {
 
 constexpr const char* kProposeE2E4 =
     R"({"type":"proposeMove","move":{"from":"e2","to":"e4"}})";
+
+// A mock engine that just records the membership lifecycle per connection, so a
+// Room-level test can assert onJoin/onLeave stays balanced across seat<->spectator
+// transitions (freeSeat, a spectator taking a seat). ChessEngine ignores the leave
+// args, so it can't reveal the asymmetry the PR #20 review caught; this can.
+struct RecordingEngine : villen::IEngine {
+    struct Ev { char kind; villen::SeatId seat; };  // 'J' = onJoin, 'L' = onLeave
+    std::map<villen::ConnId, std::vector<Ev>> log;
+    villen::SeatRoster seats() const override { return {{"white", "black"}}; }
+    void onJoin(villen::Room&, villen::ConnId id, villen::SeatId s) override {
+        log[id].push_back({'J', s});
+    }
+    void onLeave(villen::Room&, villen::ConnId id, villen::SeatId s) override {
+        log[id].push_back({'L', s});
+    }
+    void onMessage(villen::Room&, villen::ConnId, villen::SeatId,
+                   std::string_view) override {}
+};
+
+// One connection's events must alternate J,L,J,L with each leave matching the seat
+// of the join it closes; a departed conn must end fully left (every join had its
+// leave). This is exactly the members_ invariant documented in room.hpp.
+void checkBalanced(const std::vector<RecordingEngine::Ev>& evs, bool departed) {
+    bool joined = false;
+    villen::SeatId last = villen::kNoSeat;
+    for (auto e : evs) {
+        if (e.kind == 'J') {
+            REQUIRE_FALSE(joined);  // no two onJoins without an onLeave between
+            joined = true;
+            last = e.seat;
+        } else {
+            REQUIRE(joined);        // no onLeave without a matching prior onJoin
+            CHECK(e.seat == last);  // ...and it closes that same role
+            joined = false;
+        }
+    }
+    if (departed) CHECK_FALSE(joined);  // balanced once the conn has closed
+}
 
 }  // namespace
 
@@ -303,4 +344,47 @@ TEST_CASE("hostile JSON on the wire cannot crash the single-threaded server") {
     auto m = parseAll(good->drain());
     CHECK(hasType(m, "joined"));
     CHECK(hasType(m, "state"));
+}
+
+TEST_CASE("Room keeps onJoin/onLeave balanced across seat<->spectator moves") {
+    // Drives Room directly with a recording engine — no networking; the WsServer
+    // never listens, and its send()/broadcast() no-op on an empty connection set.
+    villen::net::WsServer ws;
+    RecordingEngine eng;
+    villen::Room room(ws, eng, eng.seats());
+
+    const villen::ConnId A = 1, B = 2, C = 3;
+    const villen::SeatId white = 0;
+    room.onMessage(A, R"({"type":"join","seat":""})");  // A -> white
+    room.onMessage(B, R"({"type":"join","seat":""})");  // B -> black
+    room.onMessage(C, R"({"type":"join","seat":""})");  // table full -> C spectates
+
+    // Admin frees white while A is still connected: A must transition seat ->
+    // spectator (onLeave white, then onJoin kNoSeat), not merely leave — otherwise
+    // its later onClose fires a second, spurious onLeave (the PR #20 HIGH bug).
+    room.freeSeat(white);
+    REQUIRE(eng.log[A].size() == 3);
+    CHECK(eng.log[A][1].kind == 'L');
+    CHECK(eng.log[A][1].seat == white);
+    CHECK(eng.log[A][2].kind == 'J');
+    CHECK(eng.log[A][2].seat == villen::kNoSeat);
+
+    // C (a spectator) takes the freed white seat: spectator -> seat must close the
+    // spectator membership (onLeave kNoSeat) before onJoin(white) (the medium bug).
+    room.onMessage(C, R"({"type":"join","seat":"white"})");
+    REQUIRE(eng.log[C].size() == 3);
+    CHECK(eng.log[C][0].seat == villen::kNoSeat);  // J spectator
+    CHECK(eng.log[C][1].kind == 'L');
+    CHECK(eng.log[C][1].seat == villen::kNoSeat);  // L spectator (before seating)
+    CHECK(eng.log[C][2].kind == 'J');
+    CHECK(eng.log[C][2].seat == white);            // J white
+
+    room.onClose(A);
+    room.onClose(B);
+    room.onClose(C);
+
+    // Every connection ends with a balanced, single-leave-per-join lifecycle.
+    checkBalanced(eng.log[A], /*departed=*/true);
+    checkBalanced(eng.log[B], /*departed=*/true);
+    checkBalanced(eng.log[C], /*departed=*/true);
 }

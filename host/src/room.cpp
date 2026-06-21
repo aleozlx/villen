@@ -83,6 +83,7 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
     SeatId current = seatOf(id);
     if (current != kNoSeat) {
         ws_.send(id, envelope::joined(session_, roster_.names[current]));
+        members_.insert(id);
         engine_.onJoin(*this, id, current);
         return;
     }
@@ -94,9 +95,15 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
         return seats_[s].conn == 0 && (!seats_[s].held || byName);
     };
     auto take = [&](SeatId s) {
+        // A spectator taking a seat is a role transition: close its spectator
+        // membership (onLeave kNoSeat) before the new onJoin(s), so the engine
+        // sees a balanced leave→join and never two onJoins for one onLeave. A
+        // first/direct seat join isn't a member yet, so this is a no-op then.
+        if (members_.count(id)) engine_.onLeave(*this, id, kNoSeat);
         seats_[s].conn = id;
         seats_[s].held = false;  // clears any disconnected hold on reclaim
         ws_.send(id, envelope::joined(session_, roster_.names[s]));
+        members_.insert(id);
         engine_.onJoin(*this, id, s);
         broadcastSeats();
     };
@@ -116,6 +123,7 @@ void Room::handleJoin(ConnId id, const std::string& requested) {
 
     // Requested seat is live/held-by-someone, or the table is full: spectate.
     ws_.send(id, envelope::joined(session_, "spectator"));
+    members_.insert(id);
     engine_.onJoin(*this, id, kNoSeat);
 }
 
@@ -123,14 +131,24 @@ void Room::onClose(ConnId id) {
     // Hold the seat across the disconnect rather than vacating it: the dropped
     // player keeps their side reserved (status "disconnected") so the opponent
     // can't seize it, until they reconnect or the admin re-opens it (DESIGN §13).
+    bool wasSeated = false;
     bool changed = false;
     for (SeatId s = 0; s < static_cast<SeatId>(seats_.size()); ++s) {
         if (seats_[s].conn == id) {
             seats_[s].conn = 0;
             seats_[s].held = true;
             engine_.onLeave(*this, id, s);
+            wasSeated = true;
             changed = true;
         }
+    }
+    // An unseated member (spectator) got an onJoin but no seat to hold; fire its
+    // onLeave so per-connection engines can release the connection's state (the
+    // onJoin/onLeave pair stays symmetric for spectators too, framework §4).
+    auto it = members_.find(id);
+    if (it != members_.end()) {
+        if (!wasSeated) engine_.onLeave(*this, id, kNoSeat);
+        members_.erase(it);
     }
     if (changed) broadcastSeats();
 }
@@ -145,11 +163,14 @@ void Room::freeSeat(SeatId s) {
     seats_[s].conn = 0;
     seats_[s].held = false;
     if (kicked != 0) {
-        // The kicked player is still connected, now a spectator. Notify the engine
-        // it left the seat (so engine state stays in sync with membership), then
-        // tell the client so it clears its remembered seat instead of desyncing.
+        // The kicked player is still connected — transition it from seat to
+        // spectator: leave the seat, tell the client to clear its remembered
+        // seat, then re-join it as a spectator so the engine's view matches its
+        // new membership. It stays in members_ across the move, so onClose later
+        // fires exactly one matching onLeave(kNoSeat) — not a spurious second one.
         engine_.onLeave(*this, kicked, s);
         ws_.send(kicked, envelope::joined(session_, "spectator"));
+        engine_.onJoin(*this, kicked, kNoSeat);
     }
     broadcastSeats();
 }
