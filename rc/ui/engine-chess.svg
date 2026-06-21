@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title" color="#F0A34A">
+  <title id="title">Chess with archbishop</title>
+  <style>.s{fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}.f{fill:currentColor}.a{fill:#E2603B}.muted{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}</style>
+  
+  <g class="s"><rect x="11" y="11" width="42" height="42" rx="5"/><path d="M25 11v42M39 11v42M11 25h42M11 39h42"/><path d="M32 18v6M27 24h10l-2 7c4 3 6 8 6 13H23c0-5 2-10 6-13l-2-7z"/></g>
+</svg>

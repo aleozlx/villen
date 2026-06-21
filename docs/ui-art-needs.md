@@ -18,41 +18,41 @@
 ## ⭐ Highest value (do first)
 
 **Launcher — per-engine tiles/icons** (so the home screen is icons, not a text list):
-- [ ] `chess` — board/king or the archbishop (bishop+knight) nod
-- [ ] `filter` — camera + morphology/grid motif
-- [ ] `snake` — snake + apple
-- [ ] `canvas` — brush / paint splotch
-- [ ] `jam` — step-sequencer grid / music note
-- [ ] `chat` — speech bubble (local-LLM, no cloud)
+- [x] `chess` — board/king or the archbishop (bishop+knight) nod
+- [x] `filter` — camera + morphology/grid motif
+- [x] `snake` — snake + apple
+- [x] `canvas` — brush / paint splotch
+- [x] `jam` — step-sequencer grid / music note
+- [x] `chat` — speech bubble (local-LLM, no cloud)
 
 **Shell chrome** (persistent across views):
-- [ ] **Home** chip (touch "back to launcher")
-- [ ] **System Info** button (gear / info)
-- [ ] **Quit / power**
-- [ ] **Players-connected** indicator (people / plug); + tiny seat-status glyphs for
+- [x] **Home** chip (touch "back to launcher")
+- [x] **System Info** button (gear / info)
+- [x] **Quit / power**
+- [x] **Players-connected** indicator (people / plug); + tiny seat-status glyphs for
       connected / disconnected / open (today: colored dots — glyphs optional)
 
 ## Per-engine control glyphs (medium value)
 
-- [ ] **jam** — transport: play / stop / pause; **mute**; metronome/tempo; per-track
+- [x] **jam** — transport: play / stop / pause; **mute**; metronome/tempo; per-track
       instrument glyphs: kick, snare, hat, bass, synth
-- [ ] **canvas** — brush, eraser, palette/color swatches, **clear**, undo, pan/zoom
-- [ ] **filter** — camera/record, **privacy/lock** (raw never leaves device), pipeline
+- [x] **canvas** — brush, eraser, palette/color swatches, **clear**, undo, pan/zoom
+- [x] **filter** — camera/record, **privacy/lock** (raw never leaves device), pipeline
       add/remove; optional per-operator glyphs (erode, dilate, open, close, gradient,
       top-hat)
-- [ ] **chat** — send, stop-generation, new-conversation; small **model badges**
+- [x] **chat** — send, stop-generation, new-conversation; small **model badges**
       (Llama / Qwen / Mistral)
-- [ ] **snake** — food/apple sprite, snake-head (cells can otherwise be plain shapes)
+- [x] **snake** — food/apple sprite, snake-head (cells can otherwise be plain shapes)
 - [ ] **chess** — pieces already exist; only need **fairy-piece** sprites when fairy
       chess lands (archbishop / chancellor, etc.)
 
 ## States & misc (nice to have)
 
-- [ ] **"No engine running"** / idle-attract illustration for the launcher
-- [ ] Loading spinner / progress
-- [ ] Error / offline glyph
-- [ ] System-Info view: Steam-Deck / APU / GPU / Wi-Fi glyphs (minor)
-- [ ] "Scan to join" framing around the QR code (optional)
+- [x] **"No engine running"** / idle-attract illustration for the launcher
+- [x] Loading spinner / progress
+- [x] Error / offline glyph
+- [x] System-Info view: Steam-Deck / APU / GPU / Wi-Fi glyphs (minor)
+- [x] "Scan to join" framing around the QR code (optional)
 
 ## Notes for whoever generates these
 
