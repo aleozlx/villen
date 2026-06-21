@@ -1,0 +1,236 @@
+// Pure-core tests for the `chat` engine (DESIGN-chat.md §2/§14 step 1).
+//
+// Two deterministic halves get the same CI treatment as chess: the conversation
+// state machine (append/reset/cap) and the per-model prompt-templating table.
+// There is no oracle for *generation* (§2), so nothing here touches a model or a
+// GPU — exact data in, exact strings out. Acceptance criterion §1.
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest/doctest.h>
+
+#include <string>
+
+#include "villen/chat/conversation.hpp"
+#include "villen/chat/prompt.hpp"
+
+using namespace villen::chat;
+
+// --- Conversation state ------------------------------------------------------
+
+TEST_CASE("conversation append / messages ordering") {
+    Conversation c;
+    c.setSystem("You are helpful.");
+    c.addUser("Hi");
+    c.addAssistant("Hello!");
+    c.addUser("Bye");
+
+    CHECK(c.hasSystem());
+    CHECK(c.size() == 3);  // dialogue only — system is held separately
+
+    auto msgs = c.messages();
+    REQUIRE(msgs.size() == 4);  // system + 3 dialogue turns, in order
+    CHECK(msgs[0] == Turn{Role::System, "You are helpful."});
+    CHECK(msgs[1] == Turn{Role::User, "Hi"});
+    CHECK(msgs[2] == Turn{Role::Assistant, "Hello!"});
+    CHECK(msgs[3] == Turn{Role::User, "Bye"});
+}
+
+TEST_CASE("append(System) routes to setSystem, not the dialogue") {
+    Conversation c;
+    c.append(Role::System, "sys");
+    c.append(Role::User, "u");
+    CHECK(c.system() == "sys");
+    CHECK(c.size() == 1);
+    CHECK(c.turns()[0] == Turn{Role::User, "u"});
+}
+
+TEST_CASE("reset keeps the operator system prompt; clearSystem wipes it") {
+    Conversation c;
+    c.setSystem("S");
+    c.addUser("u");
+    c.addAssistant("a");
+
+    c.reset();  // chatReset (§7): drop dialogue, keep operator state
+    CHECK(c.empty());
+    CHECK(c.system() == "S");
+
+    c.addUser("u2");
+    c.reset(/*clearSystem=*/true);
+    CHECK(c.empty());
+    CHECK_FALSE(c.hasSystem());
+}
+
+TEST_CASE("empty system is not emitted") {
+    Conversation c;
+    c.addUser("u");
+    CHECK_FALSE(c.hasSystem());
+    CHECK(c.messages().size() == 1);  // no leading system message
+    c.setSystem("");
+    CHECK_FALSE(c.hasSystem());
+}
+
+// --- Context cap (§5) --------------------------------------------------------
+
+TEST_CASE("token estimate is ceil(chars / kCharsPerToken)") {
+    CHECK(Conversation::estimateTokens("") == 0);
+    CHECK(Conversation::estimateTokens("a") == 1);
+    CHECK(Conversation::estimateTokens("abcd") == 1);   // 4/4
+    CHECK(Conversation::estimateTokens("abcde") == 2);  // ceil(5/4)
+}
+
+TEST_CASE("estimatedTokens sums content plus per-message overhead") {
+    Conversation c;
+    c.setSystem("abcd");   // 1 token + overhead
+    c.addUser("abcd");     // 1 token + overhead
+    const auto k = Conversation::kPerMessageOverhead;
+    CHECK(c.estimatedTokens() == (1 + k) + (1 + k));
+}
+
+TEST_CASE("capToTokens is a no-op within budget") {
+    Conversation c;
+    c.addUser("u");
+    CHECK(c.capToTokens(10'000) == 0);
+    CHECK(c.size() == 1);
+}
+
+TEST_CASE("capToTokens drops oldest turns, keeps the most recent and the system") {
+    Conversation c;
+    c.setSystem("sys");
+    c.addUser("11111111");       // 8 chars -> 2 tokens (+overhead)
+    c.addAssistant("22222222");
+    c.addUser("33333333");       // the live query — must survive
+
+    const auto before = c.estimatedTokens();
+    std::size_t dropped = c.capToTokens(before / 2);
+    CHECK(dropped >= 1);
+    CHECK(c.hasSystem());                          // system is preserved
+    REQUIRE(c.size() >= 1);
+    CHECK(c.turns().back() == Turn{Role::User, "33333333"});  // newest kept
+    CHECK(c.estimatedTokens() <= before);
+}
+
+TEST_CASE("capToTokens never drops the last remaining dialogue turn") {
+    Conversation c;
+    c.addUser("a very long single user turn that exceeds any tiny budget");
+    CHECK(c.capToTokens(1) == 0);  // can't go below one turn
+    CHECK(c.size() == 1);
+}
+
+TEST_CASE("capToTokens leaves the dialogue opening on a user turn") {
+    Conversation c;
+    // Three pairs; trimming the front would otherwise leave an assistant first.
+    c.addUser("aaaaaaaa");
+    c.addAssistant("bbbbbbbb");
+    c.addUser("cccccccc");
+    c.addAssistant("dddddddd");
+    c.addUser("eeeeeeee");
+
+    c.capToTokens(c.estimatedTokens() / 3);
+    REQUIRE(c.size() >= 1);
+    CHECK(c.turns().front().role == Role::User);
+}
+
+// --- Model registry (§4/§7) --------------------------------------------------
+
+TEST_CASE("known models map to the right family") {
+    REQUIRE(knownModels().size() == 3);
+    CHECK(findModel("qwen2.5-7b-instruct")->family == ModelFamily::ChatML);
+    CHECK(findModel("llama-3.1-8b-instruct")->family == ModelFamily::Llama3);
+    CHECK(findModel("mistral-7b-instruct")->family == ModelFamily::Mistral);
+    CHECK(findModel("nope") == nullptr);
+    // Qwen2.5 is wired first (Apache-2.0, §14).
+    CHECK(knownModels().front().id == "qwen2.5-7b-instruct");
+}
+
+TEST_CASE("stop tokens per family (§4)") {
+    CHECK(stopTokens(ModelFamily::Llama3)  == std::vector<std::string>{"<|eot_id|>"});
+    CHECK(stopTokens(ModelFamily::ChatML)  == std::vector<std::string>{"<|im_end|>"});
+    CHECK(stopTokens(ModelFamily::Mistral) == std::vector<std::string>{"</s>"});
+}
+
+// --- Prompt templating — exact rendered strings (§4) -------------------------
+// These pin the fallback raw-prompt path. The primary path lets llama-server
+// apply the GGUF template; this is the override for GGUFs whose template is
+// missing/wrong (§4) and the guard against a leaked special token (acceptance §4).
+
+TEST_CASE("Llama-3 single turn with system") {
+    Conversation c;
+    c.setSystem("S");
+    c.addUser("U");
+    CHECK(renderPrompt(ModelFamily::Llama3, c) ==
+          "<|begin_of_text|>"
+          "<|start_header_id|>system<|end_header_id|>\n\nS<|eot_id|>"
+          "<|start_header_id|>user<|end_header_id|>\n\nU<|eot_id|>"
+          "<|start_header_id|>assistant<|end_header_id|>\n\n");
+}
+
+TEST_CASE("Llama-3 without system omits the system block") {
+    Conversation c;
+    c.addUser("U");
+    CHECK(renderPrompt(ModelFamily::Llama3, c) ==
+          "<|begin_of_text|>"
+          "<|start_header_id|>user<|end_header_id|>\n\nU<|eot_id|>"
+          "<|start_header_id|>assistant<|end_header_id|>\n\n");
+}
+
+TEST_CASE("ChatML single turn with system") {
+    Conversation c;
+    c.setSystem("S");
+    c.addUser("U");
+    CHECK(renderPrompt(ModelFamily::ChatML, c) ==
+          "<|im_start|>system\nS<|im_end|>\n"
+          "<|im_start|>user\nU<|im_end|>\n"
+          "<|im_start|>assistant\n");
+}
+
+TEST_CASE("Mistral folds system into the first user turn") {
+    Conversation c;
+    c.setSystem("S");
+    c.addUser("U");
+    CHECK(renderPrompt(ModelFamily::Mistral, c) == "<s>[INST] S\n\nU [/INST]");
+}
+
+TEST_CASE("Mistral without system") {
+    Conversation c;
+    c.addUser("U");
+    CHECK(renderPrompt(ModelFamily::Mistral, c) == "<s>[INST] U [/INST]");
+}
+
+TEST_CASE("multi-turn renders correctly across families") {
+    Conversation c;
+    c.setSystem("You are helpful.");
+    c.addUser("Hi");
+    c.addAssistant("Hello!");
+    c.addUser("Bye");
+
+    CHECK(renderPrompt(ModelFamily::Llama3, c) ==
+          "<|begin_of_text|>"
+          "<|start_header_id|>system<|end_header_id|>\n\nYou are helpful.<|eot_id|>"
+          "<|start_header_id|>user<|end_header_id|>\n\nHi<|eot_id|>"
+          "<|start_header_id|>assistant<|end_header_id|>\n\nHello!<|eot_id|>"
+          "<|start_header_id|>user<|end_header_id|>\n\nBye<|eot_id|>"
+          "<|start_header_id|>assistant<|end_header_id|>\n\n");
+
+    CHECK(renderPrompt(ModelFamily::ChatML, c) ==
+          "<|im_start|>system\nYou are helpful.<|im_end|>\n"
+          "<|im_start|>user\nHi<|im_end|>\n"
+          "<|im_start|>assistant\nHello!<|im_end|>\n"
+          "<|im_start|>user\nBye<|im_end|>\n"
+          "<|im_start|>assistant\n");
+
+    CHECK(renderPrompt(ModelFamily::Mistral, c) ==
+          "<s>[INST] You are helpful.\n\nHi [/INST]Hello!</s>[INST] Bye [/INST]");
+}
+
+// The reply must never carry a trailing stop token — that's templating's job to
+// fence, and the acceptance §4 promise ("no leaked <|im_end|>/<|eot_id|>/</s>").
+TEST_CASE("rendered generation prompt ends ready for the assistant turn") {
+    Conversation c;
+    c.addUser("hi");
+    // None of the renderings end *with* the stop token (they end at the open
+    // assistant turn); the model's output is what gets stop-fenced downstream.
+    for (auto f : {ModelFamily::Llama3, ModelFamily::ChatML, ModelFamily::Mistral}) {
+        const std::string p = renderPrompt(f, c);
+        const std::string& stop = stopTokens(f).front();
+        CHECK(p.rfind(stop) != p.size() - stop.size());
+    }
+}

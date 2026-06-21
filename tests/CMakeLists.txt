@@ -18,3 +18,11 @@ add_executable(engine_tests engine_tests.cpp)
 target_link_libraries(engine_tests PRIVATE villen::engine doctest::doctest)
 
 add_test(NAME engine_tests COMMAND engine_tests)
+
+# The chat pure core (DESIGN-chat.md §14 step 1): conversation state +
+# per-model templating, asserted with exact rendered prompts and stop tokens —
+# the deterministic part, run in headless LLM-free/GPU-free CI (§13, acceptance §1).
+add_executable(chat_tests chat_tests.cpp)
+target_link_libraries(chat_tests PRIVATE villen::chat doctest::doctest)
+
+add_test(NAME chat_tests COMMAND chat_tests)
