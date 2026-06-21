@@ -155,7 +155,15 @@ bool WsServer::listen(std::uint16_t port) {
         return false;
     }
     setNonBlocking(listenFd_);
-    port_ = port;
+    // Read the actually-bound port back rather than trusting the argument: with
+    // port 0 the OS assigns an ephemeral one, and callers (the admin join URL, the
+    // integration tests) need port() to report what was bound, not the 0 asked for.
+    sockaddr_in bound{};
+    socklen_t blen = sizeof(bound);
+    if (::getsockname(listenFd_, reinterpret_cast<sockaddr*>(&bound), &blen) == 0)
+        port_ = ntohs(bound.sin_port);
+    else
+        port_ = port;
     return true;
 }
 
