@@ -172,7 +172,8 @@ int main(int argc, char** argv) {
     }
 
     villen::net::WsServer ws;
-    ws.setStaticRoot(clientDir);
+    // The static root is owned by the Host now: it serves the active engine's own
+    // client subdir of clientDir (admin-shell §5), set below at construction.
     if (!ws.listen(port)) {
         std::fprintf(stderr, "villen: failed to bind port %u\n", port);
         return 1;
@@ -185,7 +186,7 @@ int main(int argc, char** argv) {
     engines.push_back(std::make_unique<villen::ChessFactory>());
     engines.push_back(std::make_unique<villen::FilterFactory>());
 
-    villen::Host host(ws, std::move(engines));
+    villen::Host host(ws, std::move(engines), clientDir);
 
     // Resolve --engine to an index (default: the first engine).
     std::size_t startIndex = 0;

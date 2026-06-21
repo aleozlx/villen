@@ -4,10 +4,13 @@
 
 namespace villen {
 
-Host::Host(net::WsServer& ws, std::vector<std::unique_ptr<IEngineFactory>> engines)
-    : ws_(ws), engines_(std::move(engines)) {
+Host::Host(net::WsServer& ws, std::vector<std::unique_ptr<IEngineFactory>> engines,
+           std::string clientRoot)
+    : ws_(ws), engines_(std::move(engines)), clientRoot_(std::move(clientRoot)) {
     // Boot at the launcher (none active): inbound messages only get an
-    // engine-announce until the operator starts something.
+    // engine-announce until the operator starts something, and the host serves
+    // the base client dir until an engine names its own.
+    serveActiveClient();
     installCallbacks();
 }
 
@@ -31,6 +34,7 @@ void Host::startEngine(std::size_t index) {
     active_->attach(*room_);                       // admin actions can now reach transport
     activeIndex_ = index;
 
+    serveActiveClient();  // the host now serves THIS engine's client (admin-shell §5)
     installCallbacks();
     announceAll();  // existing clients learn the new engine and load its view
 }
@@ -43,8 +47,16 @@ void Host::stopEngine() {
     room_.reset();      // membership first (no more dispatch targets)
     active_.reset();    // dtor releases the engine's resources (admin-shell §4)
 
+    serveActiveClient();  // back to the base client dir at the launcher
     installCallbacks();
     announceAll();  // tell clients we're back at the launcher (engine: null)
+}
+
+void Host::serveActiveClient() {
+    // Point the HTTP static root at the active engine's own client subdir, or the
+    // base dir when no engine names one (clientDir() == "") or at the launcher.
+    const char* sub = active_ ? engines_[activeIndex_]->clientDir() : "";
+    ws_.setStaticRoot(sub && *sub ? clientRoot_ + "/" + sub : clientRoot_);
 }
 
 void Host::tick(std::uint64_t nowMs) {

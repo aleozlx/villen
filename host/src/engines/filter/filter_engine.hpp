@@ -92,10 +92,10 @@ class FilterFactory : public IEngineFactory {
         return std::make_unique<FilterEngine>();
     }
     const char* name() const override { return "filter"; }
-    // "" = the host's configured client dir; the filter view is served as
-    // /filter.html from that same static root (§9) until per-engine client
-    // routing lands.
-    const char* clientDir() const override { return ""; }
+    // The filter view lives in client/filter/; when filter is active the host
+    // serves that subdir as the static root, so the join URL returns the filter
+    // page directly (admin-shell §5, the settled per-engine client model).
+    const char* clientDir() const override { return "filter"; }
 };
 
 }  // namespace villen
