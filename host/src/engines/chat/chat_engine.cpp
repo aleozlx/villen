@@ -257,10 +257,13 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
     // Sinks fire later, from LlamaClient::pump() in onTick. They route deltas to
     // this connection and finalize via removeGen(abort=false): the request is
     // already finishing inside pump, so we must NOT cancel it there (reentrancy).
+    // These fire from pump() in onTick. room_ is normally valid then, but it is
+    // nulled by detach() at engine teardown — guard so a sink that pump() runs
+    // after detach can't dereference a dead Room.
     chat::StreamSink sink;
     sink.onDelta = [this, conn, convId, msgId](std::string_view d) {
         if (Gen* g = genFor(conn, convId)) g->acc.append(d);
-        room_->send(conn, deltaMsg(convId, msgId, std::string(d)));
+        if (room_) room_->send(conn, deltaMsg(convId, msgId, std::string(d)));
     };
     sink.onDone = [this, conn, convId, msgId](const std::string& reason, int tokens) {
         double tps = 0.0;
@@ -268,12 +271,12 @@ void ChatEngine::startLlama(Room& room, ConnId conn, const std::string& convId) 
             tps = tokensPerSec(tokens, g->startMs, nowMs_);
             conv(conn, convId).addAssistant(g->acc);
         }
-        room_->send(conn, doneMsg(convId, msgId, reason.c_str(), tokens, tps));
+        if (room_) room_->send(conn, doneMsg(convId, msgId, reason.c_str(), tokens, tps));
         removeGen(conn, convId, /*abort=*/false);
     };
     sink.onError = [this, conn, convId, msgId](const std::string& reason) {
         (void)msgId;
-        room_->send(conn, errorMsg(convId, reason.c_str()));
+        if (room_) room_->send(conn, errorMsg(convId, reason.c_str()));
         removeGen(conn, convId, /*abort=*/false);
     };
 

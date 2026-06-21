@@ -347,3 +347,18 @@ TEST_CASE("SSE: a data line split across chunk boundaries reassembles") {
     REQUIRE(data.size() == 1);
     CHECK(data[0] == "{\"d\":\"part\"}");
 }
+
+TEST_CASE("SSE: an overflowing chunk size cannot bypass the bounds check") {
+    // A corrupt/hostile chunk advertises an astronomical size (SIZE_MAX in hex).
+    // The parser must treat it as "not fully arrived" and keep buffering — never
+    // let `crlf + 2 + size + 2` wrap and read past the buffer (DoS / OOB read).
+    const std::string wire = std::string(kHdr) + "ffffffffffffffff\r\n" +
+                             "data: {\"d\":\"x\"}\n\n";  // some real bytes follow
+    auto items = drain(wire, /*byteWise=*/false);
+    REQUIRE(!items.empty());
+    CHECK(items.front().kind == SseParser::Kind::Headers);
+    CHECK(dataPayloads(items).empty());  // the impossible chunk is never satisfied
+    int dones = 0;
+    for (const auto& it : items) dones += (it.kind == SseParser::Kind::Done);
+    CHECK(dones == 0);
+}

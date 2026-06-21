@@ -36,7 +36,12 @@ LlamaClient::ReqId LlamaClient::start(const std::string& body, StreamSink sink) 
     sockaddr_in addr{};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(static_cast<std::uint16_t>(port_));
-    if (::inet_pton(AF_INET, host_.c_str(), &addr.sin_addr) != 1) {
+    // The backend is always a loopback llama-server (one we spawned or were
+    // pointed at via --llama-url), so a numeric IPv4 is expected; "localhost" is
+    // accepted as a convenience. We deliberately don't use getaddrinfo — DNS
+    // resolution blocks, and this client must never block the main loop.
+    const char* hostNumeric = (host_ == "localhost") ? "127.0.0.1" : host_.c_str();
+    if (::inet_pton(AF_INET, hostNumeric, &addr.sin_addr) != 1) {
         ::close(fd);
         return 0;
     }
@@ -103,7 +108,9 @@ void LlamaClient::pump() {
             r.connected = true;
         }
         if (r.connected && !r.outbuf.empty() && (re & POLLOUT)) serviceWrite(r);
-        if (r.connected && (re & (POLLIN | POLLHUP))) serviceRead(r);
+        // serviceWrite may have failed the request this tick; don't then read a
+        // socket we've already given up on.
+        if (!r.finished && r.connected && (re & (POLLIN | POLLHUP))) serviceRead(r);
     }
 
     // Reap finished/failed requests.

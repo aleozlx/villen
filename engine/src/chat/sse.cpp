@@ -88,9 +88,13 @@ void SseParser::decodeBody(std::vector<Item>&) {
             ended_ = true;
             return;  // feed()/parseSse handle flushing the final event
         }
-        if (buf_.size() < crlf + 2 + size + 2) return;  // full chunk not arrived
+        // A malicious/corrupt chunk size could be enormous; test it by
+        // subtraction on the buffer size (the known-bounded side) so the
+        // "+ size" never overflows std::size_t and bypasses the check.
+        if (buf_.size() < crlf + 4 || buf_.size() - (crlf + 4) < size)
+            return;  // full chunk not arrived
         sse_.append(buf_, crlf + 2, size);
-        buf_.erase(0, crlf + 2 + size + 2);  // drop size line, data, trailing CRLF
+        buf_.erase(0, crlf + size + 4);  // drop size line, data, trailing CRLF
     }
 }
 
