@@ -16,6 +16,14 @@ using json = nlohmann::json;
 namespace villen {
 namespace {
 
+// Read a string field from untrusted client JSON without throwing: a wrong JSON
+// type (or a missing key) yields "" rather than a json::type_error that would
+// crash the single-thread server (DoS) — same discipline as chess/envelope.
+std::string strField(const json& j, const char* key) {
+    auto it = j.find(key);
+    return (it != j.end() && it->is_string()) ? it->get<std::string>() : std::string();
+}
+
 // --- §7 server -> client frames ---------------------------------------------
 
 std::string deltaMsg(const std::string& convId, int msgId, const std::string& delta) {
@@ -110,11 +118,14 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
         room.send(conn, errorMsg("", "bad_message"));
         return;
     }
-    const std::string type = j.value("type", "");
-    const std::string convId = j.value("convId", "");
+    // Every field type-checked (strField never throws), so a malformed payload
+    // (e.g. {"type":123} or a non-string text) is rejected, not fatal.
+    const std::string type = strField(j, "type");
+    const std::string convId = strField(j, "convId");
 
     if (type == "chatSend") {
-        if (convId.empty() || !j.contains("text") || !j["text"].is_string()) {
+        const std::string userText = strField(j, "text");
+        if (convId.empty() || userText.empty()) {
             room.send(conn, errorMsg(convId, "bad_message"));
             return;
         }
@@ -124,7 +135,6 @@ void ChatEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view tex
             room.send(conn, errorMsg(convId, "model_busy"));
             return;
         }
-        const std::string userText = j["text"].get<std::string>();
         chat::Conversation& c = conv(conn, convId);
         c.setSystem(systemPrompt_);
         c.addUser(userText);
