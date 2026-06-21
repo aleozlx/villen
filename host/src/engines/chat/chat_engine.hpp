@@ -44,6 +44,7 @@ struct ChatBackendConfig {
     bool stub = false;        // --chat-stub → in-host echo generator
     std::string llamaBin;     // --llama-bin → spawn this llama-server
     std::string model;        // -m model for the spawned server (§11)
+    std::string modelsDir;    // --models-dir → scan for switchable GGUFs (§5)
     int ngl = 99;             // -ngl GPU layers (§6)
     int parallel = 2;         // --parallel slots (§8)
 };
@@ -62,6 +63,24 @@ class ChatEngine : public IEngine {
     void drawAdmin() override;
     void reset() override;                             // stop all + clear
 
+    // --- model-switching seam (§5; the admin console, step 6, drives this) ------
+    // A model the operator can select: a GGUF found in --models-dir (or the --model
+    // file) matched to a known model id/family. Switching is operator-only (§7/§11),
+    // never a client message.
+    struct AvailableModel {
+        std::string id;           // wire id (chatConfig.model), e.g. "qwen2.5-7b-instruct"
+        std::string displayName;  // human label for the admin combo
+        std::string path;         // GGUF passed to llama-server -m
+        chat::ModelFamily family;
+    };
+    const std::vector<AvailableModel>& availableModels() const { return available_; }
+    const std::string& activeModel() const { return model_; }
+    // Switch the resident model by id: respawn llama-server with its GGUF, abort
+    // in-flight generations, and re-handshake clients (new chatConfig). False if the
+    // id isn't available or we don't manage the server (connect-only/stub/down).
+    bool setActiveModel(const std::string& id);
+    void cycleModel();  // advance to the next available model (headless: SIGUSR1)
+
  private:
     enum class Mode { Down, Stub, Llama };
 
@@ -79,6 +98,9 @@ class ChatEngine : public IEngine {
     Mode mode_ = Mode::Down;
     std::unique_ptr<chat::LlamaClient> llama_;     // set in Llama mode
     std::unique_ptr<chat::LlamaProcess> process_;  // set when we spawn llama-server
+
+    std::vector<AvailableModel> available_;  // switchable models (spawn mode only, §5)
+    bool readyBroadcast_ = false;            // last backend-ready state pushed to clients
 
     // Per-connection, per-convId conversation state — private, in RAM only (§11).
     std::unordered_map<ConnId,
@@ -120,6 +142,13 @@ class ChatEngine : public IEngine {
     void startLlama(Room&, ConnId, const std::string& convId);
     std::string requestBody(const chat::Conversation&) const;  // /v1/chat body
     std::string configJson() const;                            // chatConfig (§7)
+    bool backendReady() const;                                 // chatConfig.ready
+
+    // Build the switchable-model registry from a GGUF directory (§5): each *.gguf
+    // whose filename matches a known model id/family becomes an AvailableModel.
+    void scanModels(const std::string& dir);
+    void addAvailable(const chat::ModelInfo&, std::string path);  // dedup by id, path wins
+    const AvailableModel* findAvailable(const std::string& id) const;
 };
 
 class ChatFactory : public IEngineFactory {

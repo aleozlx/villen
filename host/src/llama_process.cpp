@@ -30,12 +30,30 @@ LlamaProcess::~LlamaProcess() {
     }
 }
 
+void LlamaProcess::setModel(std::string modelPath) {
+    if (modelPath.empty() || modelPath == cfg_.model) return;
+    cfg_.model = std::move(modelPath);
+    ready_ = false;
+    if (pid_ > 0) {
+        // Signal the old child; reapIfExited() collects it non-blocking and the
+        // next tick respawns with the new -m. Until then, don't probe the dying
+        // server's /health (it may still answer 200 for a beat).
+        ::kill(pid_, SIGTERM);
+        draining_ = true;
+        lastError_ = "switching model";
+    } else {
+        nextSpawnMs_ = 0;  // not running — spawn the new model promptly
+        lastError_ = "starting";
+    }
+}
+
 void LlamaProcess::tick(std::uint64_t nowMs) {
     reapIfExited(nowMs);
     if (pid_ <= 0) {
         if (nowMs >= nextSpawnMs_) spawn(nowMs);
         return;
     }
+    if (draining_) return;  // old child is being killed for a switch; don't probe it
     if (!ready_ && nowMs >= nextHealthMs_) {
         nextHealthMs_ = nowMs + kHealthIntervalMs;
         if (probeHealth()) {
@@ -86,17 +104,26 @@ void LlamaProcess::reapIfExited(std::uint64_t nowMs) {
     if (r < 0 && errno == ECHILD) {  // already reaped somehow
         pid_ = -1;
         ready_ = false;
+        draining_ = false;
         return;
     }
     // Child exited or was signalled — surface it and schedule a restart (§3.A
-    // crash isolation: the appliance keeps running, the child comes back).
-    if (WIFSIGNALED(status))
+    // crash isolation: the appliance keeps running, the child comes back). A
+    // drain (deliberate kill for a model switch) isn't a crash: keep the
+    // "switching" message and respawn promptly, no backoff.
+    if (draining_) {
+        lastError_ = "loading model";
+        nextSpawnMs_ = nowMs;
+    } else if (WIFSIGNALED(status)) {
         lastError_ = "killed by signal " + std::to_string(WTERMSIG(status));
-    else
+        nextSpawnMs_ = nowMs + kRespawnBackoffMs;
+    } else {
         lastError_ = "exited (code " + std::to_string(WEXITSTATUS(status)) + ")";
+        nextSpawnMs_ = nowMs + kRespawnBackoffMs;
+    }
     pid_ = -1;
     ready_ = false;
-    nextSpawnMs_ = nowMs + kRespawnBackoffMs;
+    draining_ = false;
 }
 
 bool LlamaProcess::probeHealth() {

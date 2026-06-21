@@ -1,6 +1,9 @@
 #include "chat_engine.hpp"
 
+#include <dirent.h>
+
 #include <algorithm>
+#include <cctype>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -67,16 +70,42 @@ double tokensPerSec(int emitted, std::uint64_t startMs, std::uint64_t nowMs) {
     return static_cast<double>(emitted) * 1000.0 / static_cast<double>(nowMs - startMs);
 }
 
+// Lowercased copy, for the case-insensitive ".gguf" suffix test in scanModels.
+// (Model-name matching itself lives in the pure core: chat::matchModelByFilename.)
+std::string toLower(std::string s) {
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
 }  // namespace
 
 ChatEngine::ChatEngine(ChatBackendConfig cfg) {
     if (!cfg.llamaBin.empty()) {
-        // Spawn-and-manage: the host owns the llama-server child (§3.A).
+        // Spawn-and-manage: the host owns the llama-server child (§3.A). Only here
+        // do we build the switchable-model registry (§5) — switching is meaningful
+        // only for a server we control.
         mode_ = Mode::Llama;
         int port = cfg.llamaPort > 0 ? cfg.llamaPort : 8080;
+
+        if (!cfg.modelsDir.empty()) scanModels(cfg.modelsDir);
+        // The explicit --model is the initial active model; make sure it's in the
+        // registry (its path wins) and adopt its id. Otherwise default to the first
+        // discovered model, else keep the hardcoded model_ default.
+        std::string activePath = cfg.model;
+        if (!activePath.empty()) {
+            const std::string base = activePath.substr(activePath.find_last_of('/') + 1);
+            if (const chat::ModelInfo* mi = chat::matchModelByFilename(base)) {
+                addAvailable(*mi, activePath);
+                model_ = mi->id;
+            }
+        } else if (!available_.empty()) {
+            activePath = available_.front().path;
+            model_ = available_.front().id;
+        }
+
         chat::LlamaSpawnConfig sp;
         sp.bin = cfg.llamaBin;
-        sp.model = cfg.model;
+        sp.model = activePath;
         sp.host = cfg.llamaHost;
         sp.port = port;
         sp.ngl = cfg.ngl;
@@ -114,20 +143,62 @@ void ChatEngine::removeGen(ConnId conn, const std::string& convId, bool abort) {
                 gens_.end());
 }
 
+bool ChatEngine::backendReady() const {
+    // A spawned server must pass /health first; a connect-only backend is optimistic
+    // (errors surface as backend_down); Down (and Stub-less) is never ready.
+    return mode_ == Mode::Stub ||
+           (mode_ == Mode::Llama && (!process_ || process_->ready()));
+}
+
 std::string ChatEngine::configJson() const {
+    // Advertise the models the operator can actually switch to (§5/§7). Outside
+    // spawn mode there's no registry, so fall back to just the active id.
     json models = json::array();
-    for (const auto& m : chat::knownModels()) models.push_back(m.id);
-    // ready reflects the backend: a spawned server must pass /health first; a
-    // connect-only backend is optimistic (errors surface as backend_down); Down
-    // and Stub-less is never ready.
-    bool ready = mode_ == Mode::Stub ||
-                 (mode_ == Mode::Llama && (!process_ || process_->ready()));
+    for (const auto& m : available_) models.push_back(m.id);
+    if (models.empty()) models.push_back(model_);
     json msg = {{"type", "chatConfig"},
                 {"model", model_},
                 {"models", std::move(models)},
                 {"contextMax", contextMax_},
-                {"ready", ready}};
+                {"ready", backendReady()}};
     return msg.dump();
+}
+
+void ChatEngine::scanModels(const std::string& dir) {
+    DIR* d = ::opendir(dir.c_str());
+    if (!d) return;
+    std::string base = dir;
+    if (!base.empty() && base.back() != '/') base += '/';
+    while (dirent* e = ::readdir(d)) {
+        std::string name = e->d_name;
+        if (name.size() < 5 || toLower(name).rfind(".gguf") != name.size() - 5) continue;
+        if (const chat::ModelInfo* mi = chat::matchModelByFilename(name)) addAvailable(*mi, base + name);
+    }
+    ::closedir(d);
+    // Stable order = knownModels() order (Qwen first), so the default active model
+    // and the admin combo are deterministic regardless of readdir() order.
+    std::sort(available_.begin(), available_.end(),
+              [](const AvailableModel& a, const AvailableModel& b) {
+                  auto rank = [](const std::string& id) {
+                      const auto& k = chat::knownModels();
+                      for (std::size_t i = 0; i < k.size(); ++i)
+                          if (k[i].id == id) return i;
+                      return k.size();
+                  };
+                  return rank(a.id) < rank(b.id);
+              });
+}
+
+void ChatEngine::addAvailable(const chat::ModelInfo& mi, std::string path) {
+    for (auto& m : available_)
+        if (m.id == mi.id) { m.path = std::move(path); return; }  // dedup; newest path wins
+    available_.push_back({mi.id, mi.displayName, std::move(path), mi.family});
+}
+
+const ChatEngine::AvailableModel* ChatEngine::findAvailable(const std::string& id) const {
+    for (const auto& m : available_)
+        if (m.id == id) return &m;
+    return nullptr;
 }
 
 std::string ChatEngine::requestBody(const chat::Conversation& c) const {
@@ -320,6 +391,15 @@ void ChatEngine::onTick(Room& room, std::uint64_t nowMs) {
             ++i;
         }
     }
+
+    // Tell clients when backend readiness flips — the model finished loading (after
+    // spawn or a switch) or went away — so they learn it without polling through
+    // backend_down. Edge-triggered: broadcast only on the transition.
+    bool ready = backendReady();
+    if (ready != readyBroadcast_) {
+        readyBroadcast_ = ready;
+        room.broadcast(configJson());
+    }
 }
 
 void ChatEngine::collectPollFds(std::vector<int>& out) {
@@ -351,20 +431,50 @@ void ChatEngine::reset() {
     convs_.clear();
 }
 
+bool ChatEngine::setActiveModel(const std::string& id) {
+    const AvailableModel* m = findAvailable(id);
+    if (!m || !process_) return false;  // unknown id, or we don't manage the server
+    if (id == model_) return true;      // already active
+    model_ = m->id;
+    process_->setModel(m->path);        // respawn with the new -m; ready() -> false
+
+    // The backend is reloading, so abort every in-flight generation (outside pump(),
+    // so cancelling the live requests is safe) and tell each client its turn ended;
+    // clients retry through backend_down until the new model is up.
+    for (const auto& g : gens_) {
+        if (g.reqId && llama_) llama_->cancel(g.reqId);
+        if (room_) room_->send(g.conn, errorMsg(g.convId, "backend_down"));
+    }
+    gens_.clear();
+
+    // Re-handshake every client with the new model (ready:false now); onTick
+    // pushes ready:true again once the new model finishes loading.
+    if (room_) room_->broadcast(configJson());
+    readyBroadcast_ = backendReady();
+    return true;
+}
+
+void ChatEngine::cycleModel() {
+    if (available_.size() < 2) return;
+    std::size_t i = 0;
+    for (; i < available_.size(); ++i)
+        if (available_[i].id == model_) break;
+    setActiveModel(available_[(i + 1) % available_.size()].id);
+}
+
 void ChatEngine::drawAdmin() {
 #ifdef VILLEN_ADMIN_UI
     // The engine's own panel body only — the shell owns the chrome (admin-shell
     // §8). Default ImGui font is ASCII-only, so keep text ASCII. Model + params
     // are server-authoritative (§9). The full model console (load/switch, health,
     // queue depth, the system-prompt editor) is step 6; this is a minimal console.
-    const auto& models = chat::knownModels();
+    // Switch among the models we actually have a GGUF for (§5). setActiveModel does
+    // the real respawn + client re-handshake. The full console (params, queue depth,
+    // system-prompt editor) is step 6; this stays a minimal combo.
     if (ImGui::BeginCombo("Model", model_.c_str())) {
-        for (const auto& m : models) {
+        for (const auto& m : available_) {
             bool sel = (m.id == model_);
-            if (ImGui::Selectable(m.displayName.c_str(), sel)) {
-                model_ = m.id;
-                if (room_) room_->broadcast(configJson());  // push to all clients
-            }
+            if (ImGui::Selectable(m.displayName.c_str(), sel)) setActiveModel(m.id);
             if (sel) ImGui::SetItemDefaultFocus();
         }
         ImGui::EndCombo();

@@ -39,6 +39,12 @@ const std::vector<ModelInfo>& knownModels();
 // Look up a model by wire id; nullptr if unknown.
 const ModelInfo* findModel(std::string_view id);
 
+// Match a GGUF filename to a known model: the wire id appears (case-insensitively)
+// as a substring of the filename, e.g. "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf" ->
+// llama-3.1-8b-instruct. Lets the host map operator-supplied GGUFs to models for
+// switching (§5) without a hardcoded path table. nullptr if it matches none.
+const ModelInfo* matchModelByFilename(std::string_view filename);
+
 // Stop tokens for a family (§4). The backend reports the authoritative stops
 // from the GGUF; this matches them for the fallback path so generation never
 // leaks a trailing special token into the reply (acceptance §4).

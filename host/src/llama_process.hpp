@@ -8,8 +8,8 @@
 // from the single main loop (tick), no thread (§5).
 //
 // One model resident at a time (§5): switching models = restart the child with a
-// new -m. This MVP spawns one model; switch/-ngl tuning land with the admin
-// console (§9, step 6).
+// new -m (setModel, step 5). The admin console (§9, step 6) drives it; -ngl
+// tuning still lands there.
 #pragma once
 
 #include <cstdint>
@@ -40,15 +40,22 @@ class LlamaProcess {
     // restart with backoff), probe /health to flip ready(). Call from onTick.
     void tick(std::uint64_t nowMs);
 
+    // Switch the resident model (§5): respawn the child with a new -m. The current
+    // child is signalled here and reaped non-blocking by tick(); ready() stays
+    // false until the new model loads. No-op if modelPath is empty or unchanged.
+    void setModel(std::string modelPath);
+
     bool ready() const { return ready_; }     // /health returned 200 (model up)
     bool running() const { return pid_ > 0; }
     int port() const { return cfg_.port; }
+    const std::string& model() const { return cfg_.model; }
     const std::string& lastError() const { return lastError_; }
 
  private:
     LlamaSpawnConfig cfg_;
     pid_t pid_ = -1;
     bool ready_ = false;
+    bool draining_ = false;           // killing the old child mid-switch; skip /health
     std::uint64_t nextSpawnMs_ = 0;   // backoff gate after a death
     std::uint64_t nextHealthMs_ = 0;  // throttle for health probes
     std::string lastError_;
