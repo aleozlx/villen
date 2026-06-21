@@ -97,7 +97,8 @@ void ChessEngine::onLeave(Room&, ConnId, SeatId) {
     // Membership is Room's to track; chess keeps no per-connection state.
 }
 
-void ChessEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view text) {
+void ChessEngine::onMessage(Room& room, ConnId conn, SeatId seat,
+                            std::string_view text) {
     json j = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (j.is_discarded() || !j.is_object() || !j.contains("type")) {
         room.send(conn, rejectMsg("bad_message"));
@@ -128,10 +129,21 @@ void ChessEngine::onMessage(Room& room, ConnId conn, SeatId, std::string_view te
     move.to = *to;
     move.promotion = promoFromString(strField(mj, "promotion"));
 
+    // You must hold a seat to move at all. The "lone player drives both sides"
+    // allowance below is for a *seated* player to play an open side — not for an
+    // unseated spectator to move pieces. Without this guard an open side-to-move
+    // seat (owner 0, not held) would accept moves from any connected socket,
+    // including one that never sent `join` (DESIGN §9.3: never trust an unseated
+    // connection).
+    if (seat == kNoSeat) {
+        room.send(conn, rejectMsg("not_seated", move));
+        return;
+    }
+
     // Authority is derived from the connection and the side to move — never from
     // a client-supplied seat (DESIGN §9.3). The acting seat is the side to move;
     // you may move it only if you hold that seat, or it is fully open (the
-    // lone-player case).
+    // lone-player case — a seated player driving both sides).
     SeatId turnSeat = position_.sideToMove() == chess::Color::White ? kWhite : kBlack;
     ConnId owner = room.connOfSeat(turnSeat);
     const char* status = room.seatStatus(turnSeat);

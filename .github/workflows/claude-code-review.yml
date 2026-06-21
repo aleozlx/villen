@@ -42,9 +42,11 @@ jobs:
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment'
           # Authorize the inline-comment tool (and the gh commands the review uses);
           # without this the review runs but every post is permission-denied and
-          # nothing is published.
+          # nothing is published. Read/Grep/Glob let the reviewer open files for
+          # context around each diff hunk — without them it reviews diff-only (no
+          # full-file or cross-file reasoning) and misses bugs that need it.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
