@@ -7,7 +7,11 @@ Beyond chess, a slate of **experimental engines** sits on the game-agnostic slot
 (`filter`, `chat`, `snake`, `canvas`, `jam`). **`filter` (real-time mathematical
 morphology on the Deck's APU, [`docs/DESIGN-filter.md`](docs/DESIGN-filter.md)) and
 `chat` (a local LLM via a managed llama-server, [`docs/DESIGN-chat.md`](docs/DESIGN-chat.md))
-are now built and shipping**; `snake`/`canvas`/`jam` are still design drafts. The
+are now built and shipping**, and **`snake` (a real-time, server-authoritative
+arena ported from [aleozlx/snake](https://github.com/aleozlx/snake),
+[`docs/DESIGN-snake.md`](docs/DESIGN-snake.md)) is built and CI-tested** (its one
+remaining piece is routing the Deck's own controllers into a seat, §6);
+`canvas`/`jam` are still design drafts. The
 roadmap — with *how each was chosen* (one architectural axis each) — is
 [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md); the **launcher**
 that runs one engine at a time (also built) is

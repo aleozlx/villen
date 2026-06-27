@@ -17,6 +17,7 @@ add_executable(villen
     src/engines/filter/filter_engine.cpp
     src/engines/filter/stb_impl.cpp
     src/engines/chat/chat_engine.cpp
+    src/engines/snake/snake_engine.cpp
     src/llama_client.cpp
     src/llama_process.cpp
 )
@@ -27,8 +28,9 @@ target_include_directories(villen PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # villen::filter is the pure CPU morphology reference the engine runs (and the
-# APU backend is validated against, §4.3); villen::chat is the pure chat core.
-target_link_libraries(villen PRIVATE villen::engine villen::filter villen::chat)
+# APU backend is validated against, §4.3); villen::chat is the pure chat core;
+# villen::snake is the pure, deterministic snake simulation (DESIGN-snake §3).
+target_link_libraries(villen PRIVATE villen::engine villen::filter villen::chat villen::snake)
 target_compile_features(villen PRIVATE cxx_std_17)
 
 # Dev convenience: serve the browser client straight from the source tree unless

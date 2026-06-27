@@ -50,3 +50,21 @@ target_include_directories(villen_chat PUBLIC
 
 target_compile_features(villen_chat PUBLIC cxx_std_17)
 add_library(villen::chat ALIAS villen_chat)
+
+# The pure `snake` simulation (DESIGN-snake.md §3): grid + snakes + food + a
+# deterministic tick, plus the A* AI movers (§7). No SDL, no GL, no sockets — the
+# upstream snake2 logic lifted out of its app shell. Always built, always unit-
+# tested in headless CI (a fixed seed + input script asserts the exact grid),
+# exactly like villen_engine / villen_filter / villen_chat. The lightest engine:
+# no GPU, no subprocess, no codec (§9).
+add_library(villen_snake
+    src/snake/world.cpp
+    src/snake/pathfinding.cpp
+)
+
+target_include_directories(villen_snake PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_compile_features(villen_snake PUBLIC cxx_std_17)
+add_library(villen::snake ALIAS villen_snake)

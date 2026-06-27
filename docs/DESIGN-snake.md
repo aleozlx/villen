@@ -10,8 +10,15 @@
 > Names derive mechanically: namespace `villen::snake`, lib `villen_snake`, doc
 > `DESIGN-snake.md`, `--engine snake`.
 
-**Status:** design / additive. A starting brief for the agent who will build it,
-porting an existing codebase into Villen's spine.
+**Status:** **built & CI-tested** (was: design / additive). The pure simulation
+(`engine/snake/`, `villen::snake`), the `SnakeEngine` host adapter (fixed-timestep
+clock + state broadcast), the browser client (`client/snake/`), and the A\* AI
+snakes are all in and exercised in headless CI — deterministic replay tests
+(`tests/snake_tests.cpp`) plus a host integration test over a real WebSocket
+(`tests/snake_integration_tests.cpp`). Run it with `--engine snake`. The build
+order below (§9) is done through step 5 and step 7; the one remaining piece is
+**step 6, the Deck's own controllers as players** (§6), which needs the on-Deck
+SDL gamepad plumbing and real hardware to land.
 **Scope:** the slice that proves a **server-authoritative, fixed-timestep, real-time
 multiplayer** engine fits the single-thread loop — inputs in, a tick advances the
 world, state broadcasts out.

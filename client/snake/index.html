@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<!--
+  Villen snake client (DESIGN-snake §8). Plain HTML/CSS/ES-modules, no build step
+  (CLAUDE.md). Renders the host's authoritative grid on a <canvas> from each
+  `state` broadcast and sends only a direction (intent, never a position, §5).
+  Served at /snake/; rolls its own text WebSocket like the filter client so it
+  doesn't depend on a shared /src path that the per-engine static root rewrites.
+  Big, friendly, high-contrast — it's for kids.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Villen · snake</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        font: 16px/1.4 system-ui, sans-serif; background: #0d1016; color: #e8edf2;
+        display: flex; flex-direction: column; align-items: center;
+        gap: 8px; padding: 10px; overflow: hidden; touch-action: none;
+        -webkit-user-select: none; user-select: none;
+      }
+      header { display: flex; align-items: baseline; gap: 10px; }
+      .title { font-size: 19px; font-weight: 700; letter-spacing: 0.5px; }
+      .dim { color: #6b7785; font-weight: 400; }
+      .status { font-size: 13px; color: #7da3c8; min-height: 1.2em; }
+      #scores { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center;
+                font-size: 14px; min-height: 1.4em; }
+      .score { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
+               border-radius: 999px; background: #161b22; }
+      .score.me { outline: 2px solid #e8edf2; }
+      .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+      .stage { position: relative; }
+      #board { background: #0a0c11; border-radius: 10px; box-shadow: 0 6px 28px #0009;
+               max-width: 96vw; max-height: 66vh; height: auto; touch-action: none; }
+      /* On-screen D-pad — thumb-sized, for phones (DESIGN-snake §6/§8). */
+      .dpad { display: grid; grid-template-columns: repeat(3, 64px);
+              grid-template-rows: repeat(3, 64px); gap: 6px; margin-top: 4px; }
+      .dpad button {
+        font-size: 26px; border: none; border-radius: 12px; background: #1b2430;
+        color: #cdd9e5; cursor: pointer; -webkit-tap-highlight-color: transparent;
+      }
+      .dpad button:active { background: #2b3a4d; }
+      .dpad .up    { grid-area: 1 / 2; }
+      .dpad .left  { grid-area: 2 / 1; }
+      .dpad .right { grid-area: 2 / 3; }
+      .dpad .down  { grid-area: 3 / 2; }
+      .hint { font-size: 12px; color: #6b7785; text-align: center; max-width: 520px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="title">Villen <span class="dim">· snake</span></span>
+      <span id="status" class="status">connecting…</span>
+    </header>
+
+    <div id="scores"></div>
+
+    <div class="stage">
+      <canvas id="board" width="640" height="400"></canvas>
+    </div>
+
+    <div class="dpad" aria-label="direction pad">
+      <button class="up"    data-dir="up"    aria-label="up">▲</button>
+      <button class="left"  data-dir="left"  aria-label="left">◀</button>
+      <button class="right" data-dir="right" aria-label="right">▶</button>
+      <button class="down"  data-dir="down"  aria-label="down">▼</button>
+    </div>
+
+    <p class="hint">
+      Steer with the <strong>D-pad</strong>, <strong>swipe</strong> the board,
+      <strong>arrow keys / WASD</strong>, or a <strong>gamepad</strong>. Edges
+      wrap — you can't fall off, and bumping is forgiving.
+    </p>
+
+    <script type="module" src="snake.js"></script>
+  </body>
+</html>

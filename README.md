@@ -84,9 +84,10 @@ connected over WebSocket on the same thread:
 ## Engines
 
 The slot is game-agnostic, so chess is only the first occupant. The table starts
-with the **built** engines — chess (the reference spine), plus `filter` and `chat`
-now running on the Steam Deck (✅) — and descends into the **design drafts** (📝),
-each chosen to stress a *different* axis of the architecture. See
+with the **built** engines — chess (the reference spine), `filter` and `chat` now
+running on the Steam Deck, plus `snake` (the real-time arena, built and CI-tested;
+Deck-pad-as-seat is its one pending piece) (✅) — and descends into the **design
+drafts** (📝), each chosen to stress a *different* axis of the architecture. See
 [`docs/DESIGN-engine-roadmap.md`](docs/DESIGN-engine-roadmap.md) for the full
 rationale, coverage matrix, and the "pick by axis, not by app" selection method.
 
@@ -95,7 +96,7 @@ rationale, coverage matrix, and the "pick by axis, not by app" selection method.
 | ✅ [`chess`](docs/DESIGN-villen.md) | the first engine and the reference: 2-seat turn-based board game, regular + fairy variants | the spine itself — authority, legality, turn order |
 | ✅ [`filter`](docs/DESIGN-filter.md) | live camera → mathematical-morphology on the Deck's **APU** → processed frame back to the browser | streaming GPU-on-APU compute, per-connection privacy, binary transport |
 | ✅ [`chat`](docs/DESIGN-chat.md) | **local LLM chat** via llama.cpp (Llama 3.1 8B / Qwen2.5 7B / Mistral 7B) | seconds-long blocking work kept off the single loop |
-| 📝 [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around | an authoritative server clock + netcode |
+| ✅ [`snake`](docs/DESIGN-snake.md) | a **real-time multiplayer arena** (port of [aleozlx/snake](https://github.com/aleozlx/snake)) — kids-friendly, wrap-around, A\* AI snakes | an authoritative server clock + netcode |
 | 📝 [`canvas`](docs/DESIGN-canvas.md) | a **shared collaborative drawing wall** (iPad-native) | many writers on one shared state |
 | 📝 [`jam`](docs/DESIGN-jam.md) | a **clock-synced collaborative groovebox** — devices synthesize audio locally, in sync | tight cross-device shared *time* |
 
@@ -186,7 +187,7 @@ can move with the mouse **or** a gamepad interchangeably.
 | `--port N` | TCP port for the player WebSocket + HTTP client (default 9002). |
 | `--headless` | Run the server loop without opening the admin window. |
 | `--client-dir DIR` | Serve the browser client from `DIR` (defaults to the source tree). |
-| `--engine NAME` | Boot straight into an engine (`chess`, `chat`) instead of the launcher. |
+| `--engine NAME` | Boot straight into an engine (`chess`, `filter`, `chat`, `snake`) instead of the launcher. |
 
 ### Running the `chat` engine (local LLM)
 

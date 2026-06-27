@@ -116,6 +116,31 @@ class WsClient {
         return out;
     }
 
+    // Collect every text message that arrives within `totalMs` of wall-clock,
+    // regardless of the gap between frames. drain() ends on an idle gap, which
+    // never comes for an engine that broadcasts continuously (snake ticks ~10 Hz
+    // whether or not anyone acts); this fixed window is the right tool there.
+    std::vector<std::string> collect(int totalMs) {
+        std::vector<std::string> out;
+        timeval start{};
+        ::gettimeofday(&start, nullptr);
+        auto elapsedMs = [&]() {
+            timeval now{};
+            ::gettimeofday(&now, nullptr);
+            return static_cast<int>((now.tv_sec - start.tv_sec) * 1000 +
+                                    (now.tv_usec - start.tv_usec) / 1000);
+        };
+        for (;;) {
+            int remaining = totalMs - elapsedMs();
+            if (remaining <= 0) break;
+            std::string payload;
+            bool isText = false;
+            if (!recvFrame(remaining, payload, isText)) break;  // timeout / closed
+            if (isText) out.push_back(std::move(payload));
+        }
+        return out;
+    }
+
     // Close the TCP socket: the server sees the player drop (recv 0 -> onClose).
     void disconnect() {
         if (fd_ >= 0) {

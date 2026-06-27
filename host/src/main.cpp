@@ -21,6 +21,7 @@
 #include "engines/chat/chat_engine.hpp"
 #include "engines/chess/chess_engine.hpp"
 #include "engines/filter/filter_engine.hpp"
+#include "engines/snake/snake_engine.hpp"
 #include "host.hpp"
 #include "net_util.hpp"
 #include "ws_server.hpp"
@@ -221,11 +222,13 @@ int main(int argc, char** argv) {
     // Register the engines this binary carries; the launcher lists whatever is
     // here (DESIGN-admin-shell §2). chess is the default (index 0); filter is the
     // streaming-media engine (DESIGN-filter, --engine filter); chat is the local
-    // LLM engine (DESIGN-chat, --engine chat).
+    // LLM engine (DESIGN-chat, --engine chat); snake is the real-time arena
+    // (DESIGN-snake, --engine snake).
     std::vector<std::unique_ptr<villen::IEngineFactory>> engines;
     engines.push_back(std::make_unique<villen::ChessFactory>());
     engines.push_back(std::make_unique<villen::FilterFactory>());
     engines.push_back(std::make_unique<villen::ChatFactory>(chatCfg));
+    engines.push_back(std::make_unique<villen::SnakeFactory>());
 
     villen::Host host(ws, std::move(engines), clientDir);
 
