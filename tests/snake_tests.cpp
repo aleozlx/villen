@@ -31,15 +31,21 @@ Dir reverseOf(Dir d) {
 // head around a 4-cell loop — a guaranteed self-overlap for a longer snake.
 Dir turnCW(Dir d) {
     switch (d) {
-        case Dir::Up: return Dir::Right;
-        case Dir::Right: return Dir::Down;
-        case Dir::Down: return Dir::Left;
-        case Dir::Left: return Dir::Up;
+        case Dir::Up:
+            return Dir::Right;
+        case Dir::Right:
+            return Dir::Down;
+        case Dir::Down:
+            return Dir::Left;
+        case Dir::Left:
+            return Dir::Up;
     }
     return d;
 }
 
-std::unordered_map<int, Dir> input(int id, Dir d) { return {{id, d}}; }
+std::unordered_map<int, Dir> input(int id, Dir d) {
+    return {{id, d}};
+}
 
 // Whole-snake / whole-world equality, for the exact-replay determinism check.
 bool sameSnake(const Snake& a, const Snake& b) {
@@ -161,8 +167,31 @@ TEST_CASE("lenient collisions: Respawn recovers a self-bite, Off passes through"
         return teleported;
     };
 
-    CHECK(runLoop(Collisions::Respawn));        // the self-bite respawns it small
-    CHECK_FALSE(runLoop(Collisions::Off));      // free play: it slides through itself
+    CHECK(runLoop(Collisions::Respawn));    // the self-bite respawns it small
+    CHECK_FALSE(runLoop(Collisions::Off));  // free play: it slides through itself
+}
+
+TEST_CASE("resizing to a board too small to fit every snake keeps all in bounds") {
+    Rules r;
+    r.w = 20;
+    r.h = 20;
+    r.targetFood = 0;
+    r.startLen = 3;
+    r.collisions = Collisions::Off;
+    World w = World::create(r);
+    for (int i = 0; i < 8; ++i) {
+        w.add(i, false);  // 8 snakes * 3 = 24 cells, more than a 4x4 board holds
+    }
+
+    w.resize(4, 4);  // forces the free-cell search to fail for some snakes
+
+    // Every segment must land inside the new bounds — a snake must never keep its
+    // old, now-out-of-range coordinates (the resize re-place must always run).
+    for (const Snake& s : w.snakes()) {
+        for (const ix2& c : s.body) {
+            CHECK(inBounds(w, c));
+        }
+    }
 }
 
 TEST_CASE("an A* AI snake navigates to food and scores on its own clock") {
@@ -196,8 +225,8 @@ TEST_CASE("step() is deterministic: same seed + same script => identical grid") 
         r.targetFood = 3;
         r.collisions = Collisions::Respawn;
         World w = World::create(r);
-        w.add(0, false);                  // a player
-        w.add(1, true, NavType::AStar);   // and an AI, exercising every code path
+        w.add(0, false);                 // a player
+        w.add(1, true, NavType::AStar);  // and an AI, exercising every code path
         return w;
     };
 

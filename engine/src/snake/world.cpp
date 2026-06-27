@@ -384,7 +384,8 @@ void World::resize(int w, int h) {
     // re-seed the food in the new bounds.
     food_.clear();
     for (Snake& s : snakes_) {
-        spawnSnake(s);  // scores survive a resize; only the position is re-seeded
+        s.body.clear();  // force a re-place: old coords may be out of the new bounds,
+        spawnSnake(s);   // and a full board must fall back to center, not stay stale
     }
     maintainFood();
 }
@@ -395,6 +396,7 @@ void World::reset() {
     food_.clear();
     for (Snake& s : snakes_) {
         s.score = 0;
+        s.body.clear();  // force a re-place into the (reset) bounds, never keep stale coords
         spawnSnake(s);
     }
     maintainFood();

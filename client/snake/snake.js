@@ -38,6 +38,7 @@ function connect() {
   ws = new WebSocket(`${proto}://${location.host}/`);
   ws.onopen = () => {
     setStatus("joining…");
+    lastSent = null;  // fresh socket: don't let a stale throttle swallow the first input
     ws.send(JSON.stringify({ type: "join" }));  // auto-assign a seat (a snake)
   };
   ws.onclose = () => {

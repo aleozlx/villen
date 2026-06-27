@@ -49,9 +49,8 @@ struct SnakeServer {
             using namespace std::chrono;
             while (running.load(std::memory_order_relaxed)) {
                 ws.poll(5);
-                const auto now = duration_cast<milliseconds>(
-                                     steady_clock::now().time_since_epoch())
-                                     .count();
+                const auto now =
+                    duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
                 host->tick(static_cast<std::uint64_t>(now));
             }
         });
@@ -59,7 +58,9 @@ struct SnakeServer {
 
     ~SnakeServer() {
         running.store(false, std::memory_order_relaxed);
-        if (loop.joinable()) loop.join();
+        if (loop.joinable()) {
+            loop.join();
+        }
     }
 
     std::uint16_t port() const { return ws.port(); }
@@ -69,41 +70,59 @@ std::vector<json> parseAll(const std::vector<std::string>& raw) {
     std::vector<json> out;
     for (const auto& s : raw) {
         json j = json::parse(s, nullptr, /*allow_exceptions=*/false);
-        if (!j.is_discarded()) out.push_back(std::move(j));
+        if (!j.is_discarded()) {
+            out.push_back(std::move(j));
+        }
     }
     return out;
 }
 
 std::string msgType(const json& m) {
-    if (!m.is_object()) return {};
+    if (!m.is_object()) {
+        return {};
+    }
     auto it = m.find("type");
     return (it != m.end() && it->is_string()) ? it->get<std::string>() : std::string{};
 }
 
 bool hasType(const std::vector<json>& msgs, const char* type) {
-    for (const auto& m : msgs)
-        if (msgType(m) == type) return true;
+    for (const auto& m : msgs) {
+        if (msgType(m) == type) {
+            return true;
+        }
+    }
     return false;
 }
 
 json firstOfType(const std::vector<json>& msgs, const char* type) {
-    for (const auto& m : msgs)
-        if (msgType(m) == type) return m;
+    for (const auto& m : msgs) {
+        if (msgType(m) == type) {
+            return m;
+        }
+    }
     return json{};
 }
 
 json lastOfType(const std::vector<json>& msgs, const char* type) {
     json found{};
-    for (const auto& m : msgs)
-        if (msgType(m) == type) found = m;
+    for (const auto& m : msgs) {
+        if (msgType(m) == type) {
+            found = m;
+        }
+    }
     return found;
 }
 
 // The snake object with the given id from a `state` message, or null.
 json snakeWithId(const json& state, int id) {
-    if (!state.is_object() || !state.contains("snakes")) return json{};
-    for (const auto& s : state["snakes"])
-        if (s.is_object() && s.value("id", -999) == id) return s;
+    if (!state.is_object() || !state.contains("snakes")) {
+        return json{};
+    }
+    for (const auto& s : state["snakes"]) {
+        if (s.is_object() && s.value("id", -999) == id) {
+            return s;
+        }
+    }
     return json{};
 }
 
@@ -120,8 +139,11 @@ TEST_CASE("connect announces snake and the world ticks with no input at all") {
     CHECK(hasType(msgs, "engine"));
 
     std::vector<unsigned> ticks;
-    for (const auto& m : msgs)
-        if (msgType(m) == "state") ticks.push_back(m.value("tick", 0u));
+    for (const auto& m : msgs) {
+        if (msgType(m) == "state") {
+            ticks.push_back(m.value("tick", 0u));
+        }
+    }
     REQUIRE(ticks.size() >= 2);
     // The authoritative clock: tick strictly advances with zero player input
     // (DESIGN-snake §4) — the property no prior engine had.
