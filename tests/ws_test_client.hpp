@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -112,6 +113,35 @@ class WsClient {
             if (!recvFrame(timeout, payload, isText)) break;  // timeout / closed
             if (isText) out.push_back(std::move(payload));
             timeout = idleMs;
+        }
+        return out;
+    }
+
+    // Collect every text message that arrives within `totalMs` of wall-clock,
+    // regardless of the gap between frames. drain() ends on an idle gap, which
+    // never comes for an engine that broadcasts continuously (snake ticks ~10 Hz
+    // whether or not anyone acts); this fixed window is the right tool there.
+    std::vector<std::string> collect(int totalMs) {
+        std::vector<std::string> out;
+        // steady_clock, not wall time: a backward NTP/VM clock step must never
+        // extend the window past totalMs (monotonic by construction).
+        const auto start = std::chrono::steady_clock::now();
+        for (;;) {
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - start)
+                                     .count();
+            const int remaining = totalMs - static_cast<int>(elapsed);
+            if (remaining <= 0) {
+                break;
+            }
+            std::string payload;
+            bool isText = false;
+            if (!recvFrame(remaining, payload, isText)) {
+                break;  // timeout / closed
+            }
+            if (isText) {
+                out.push_back(std::move(payload));
+            }
         }
         return out;
     }

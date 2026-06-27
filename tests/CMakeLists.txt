@@ -34,6 +34,14 @@ target_link_libraries(chat_tests PRIVATE villen::chat doctest::doctest)
 
 add_test(NAME chat_tests COMMAND chat_tests)
 
+# The pure `snake` simulation (DESIGN-snake.md §3, §10 acceptance #1): a fixed
+# input script over a fixed seed asserts the exact grid — same GPU-free, always-on
+# CI discipline as the engine tests above.
+add_executable(snake_tests snake_tests.cpp)
+target_link_libraries(snake_tests PRIVATE villen::snake doctest::doctest)
+
+add_test(NAME snake_tests COMMAND snake_tests)
+
 # Host integration tests: drive the real WsServer + Host + ChessEngine over a
 # loopback WebSocket (see integration_tests.cpp). They only make sense when the
 # host is being built, so they share its precondition. They compile the host's
@@ -57,6 +65,25 @@ if(VILLEN_BUILD_HOST AND EXISTS "${CMAKE_SOURCE_DIR}/host/CMakeLists.txt")
     target_link_libraries(integration_tests PRIVATE
         villen::engine doctest::doctest Threads::Threads)
     add_test(NAME integration_tests COMMAND integration_tests)
+
+    # Snake host integration: the real WsServer + Host + SnakeEngine over a
+    # loopback WebSocket (DESIGN-snake §10 acceptance #3) — the authoritative
+    # clock, seat<->snake mapping, server-side steering, and a shared arena that
+    # the pure-engine tests can't exercise. Same SDL2/ImGui-free host build as
+    # integration_tests (drawAdmin compiles to an empty body without the macro).
+    add_executable(snake_integration_tests
+        snake_integration_tests.cpp
+        ${VILLEN_HOST_SRC}/ws_server.cpp
+        ${VILLEN_HOST_SRC}/net_util.cpp
+        ${VILLEN_HOST_SRC}/envelope.cpp
+        ${VILLEN_HOST_SRC}/room.cpp
+        ${VILLEN_HOST_SRC}/host.cpp
+        ${VILLEN_HOST_SRC}/engines/snake/snake_engine.cpp)
+    target_include_directories(snake_integration_tests PRIVATE
+        ${VILLEN_HOST_SRC} "${CMAKE_SOURCE_DIR}/third_party")
+    target_link_libraries(snake_integration_tests PRIVATE
+        villen::snake doctest::doctest Threads::Threads)
+    add_test(NAME snake_integration_tests COMMAND snake_integration_tests)
 
     # Chat end-to-end harness (DESIGN-chat.md §18): drives the REAL villen binary in
     # spawn mode against the LLM-free fake llama-server over a player WebSocket — the
