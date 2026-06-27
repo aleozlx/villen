@@ -99,27 +99,29 @@ bool World::findFreeCell(ix2& out) {
 void World::placeSnakeAt(Snake& s, ix2 head) {
     s.body.clear();
     s.alive = true;
+    const int W = rules_.w;
+    const int H = rules_.h;
     // Lay the body trailing behind the head, opposite the travel direction, so the
-    // snake starts mid-stride (matches the upstream's three-segment seed).
+    // snake starts mid-stride (matches the upstream's three-segment seed). Fold each
+    // cell into the grid unconditionally: a spawn is placement, not gameplay
+    // movement, so it must land on valid cells even when the wrap *rule* is off.
     ix2 back = delta(s.dir);
     for (int i = 0; i < rules_.startLen; ++i) {
-        s.body.push_back(wrapCell({head.x - back.x * i, head.y - back.y * i}));
+        int x = ((head.x - back.x * i) % W + W) % W;
+        int y = ((head.y - back.y * i) % H + H) % H;
+        s.body.push_back({x, y});
     }
 }
 
-void World::spawnSnake(Snake& s) {
-    // Give a respawn a fresh, varied heading so two respawns don't line up.
-    s.dir = static_cast<Dir>(nextRand() % 4);
+bool World::spawnSnake(Snake& s) {
     ix2 head;
-    if (findFreeCell(head)) {
-        placeSnakeAt(s, head);
-    } else {
-        // Board full: keep the snake where it is rather than failing. The lenient
-        // ruleset never *needs* a free cell, so this is a graceful degrade.
-        if (s.body.empty()) {
-            placeSnakeAt(s, {rules_.w / 2, rules_.h / 2});
-        }
+    if (!findFreeCell(head)) {
+        return false;  // board full: the caller decides (fail an add, keep a respawn)
     }
+    // Give a (re)spawn a fresh, varied heading so two of them don't line up.
+    s.dir = static_cast<Dir>(nextRand() % 4);
+    placeSnakeAt(s, head);
+    return true;
 }
 
 Snake* World::add(int id, bool ai, NavType nav) {
@@ -131,7 +133,9 @@ Snake* World::add(int id, bool ai, NavType nav) {
     s.ai = ai;
     s.nav = nav;
     s.score = 0;
-    spawnSnake(s);
+    if (!spawnSnake(s)) {
+        return nullptr;  // no room — honour the world.hpp contract, never overlap-spawn
+    }
     snakes_.push_back(std::move(s));
     return &snakes_.back();
 }
@@ -384,8 +388,10 @@ void World::resize(int w, int h) {
     // re-seed the food in the new bounds.
     food_.clear();
     for (Snake& s : snakes_) {
-        s.body.clear();  // force a re-place: old coords may be out of the new bounds,
-        spawnSnake(s);   // and a full board must fall back to center, not stay stale
+        s.body.clear();  // force a re-place: old coords may be out of the new bounds
+        if (!spawnSnake(s)) {
+            placeSnakeAt(s, {rules_.w / 2, rules_.h / 2});  // full board: center, not stale
+        }
     }
     maintainFood();
 }
@@ -396,8 +402,10 @@ void World::reset() {
     food_.clear();
     for (Snake& s : snakes_) {
         s.score = 0;
-        s.body.clear();  // force a re-place into the (reset) bounds, never keep stale coords
-        spawnSnake(s);
+        s.body.clear();  // force a re-place into the bounds, never keep stale coords
+        if (!spawnSnake(s)) {
+            placeSnakeAt(s, {rules_.w / 2, rules_.h / 2});  // full board: center fallback
+        }
     }
     maintainFood();
 }

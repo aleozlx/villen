@@ -113,7 +113,7 @@ class World {
     std::uint64_t nextRand();             // splitmix64 step — deterministic
     bool findFreeCell(ix2& out);          // a uniformly-random empty cell, or false
     void placeSnakeAt(Snake&, ix2 head);  // lay a startLen body from a head cell
-    void spawnSnake(Snake&);              // (re)place a snake at a free cell
+    bool spawnSnake(Snake&);              // place at a free cell; false if board full
     void maintainFood();                  // top up to rules_.targetFood
     void resolveCollisions();             // the lenient Respawn pass (§3)
 };

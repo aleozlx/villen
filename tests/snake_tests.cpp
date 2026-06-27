@@ -171,6 +171,36 @@ TEST_CASE("lenient collisions: Respawn recovers a self-bite, Off passes through"
     CHECK_FALSE(runLoop(Collisions::Off));  // free play: it slides through itself
 }
 
+TEST_CASE("add() refuses (returns nullptr) once the board has no room") {
+    Rules r;
+    r.w = 4;
+    r.h = 4;  // 16 cells
+    r.targetFood = 0;
+    r.startLen = 3;
+    r.collisions = Collisions::Off;
+    World w = World::create(r);
+
+    int added = 0;
+    bool refused = false;
+    for (int i = 0; i < 50; ++i) {
+        if (w.add(i, false)) {
+            ++added;
+        } else {
+            refused = true;
+            break;
+        }
+    }
+    // The board fills and add() honours its contract rather than overlap-spawning.
+    CHECK(added > 0);
+    CHECK(refused);
+    // Every placed snake is on valid, distinct-from-out-of-range cells.
+    for (const Snake& s : w.snakes()) {
+        for (const ix2& c : s.body) {
+            CHECK(inBounds(w, c));
+        }
+    }
+}
+
 TEST_CASE("resizing to a board too small to fit every snake keeps all in bounds") {
     Rules r;
     r.w = 20;

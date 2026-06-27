@@ -137,17 +137,22 @@ void SnakeEngine::pushConfig() {
 void SnakeEngine::onJoin(Room& room, ConnId id, SeatId seat) {
     room.send(id, configMsg());
     if (seat != kNoSeat) {
-        if (!world_.byId(seat)) {
-            world_.add(seat, false);  // a fresh snake for this seat
+        snake::Snake* s = world_.byId(seat);
+        if (!s) {
+            s = world_.add(seat, false);  // a fresh snake for this seat
         }
-        pendingInputs_.erase(seat);
-        room.send(id, youMsg(seat));
-        broadcastState(room);  // everyone sees the new snake appear
-    } else {
-        // A spectator: it watches the shared arena but owns no snake (§12).
-        room.send(id, youMsg(kNoSeat));
-        room.send(id, stateMsg());
+        if (s) {
+            pendingInputs_.erase(seat);
+            room.send(id, youMsg(seat));
+            broadcastState(room);  // everyone sees the new snake appear
+            return;
+        }
+        // add() can refuse on a full board (world.hpp contract): fall through and
+        // treat this connection as a spectator until the arena has room again.
     }
+    // A spectator (no seat, or a seat we couldn't place): watches, owns no snake (§12).
+    room.send(id, youMsg(kNoSeat));
+    room.send(id, stateMsg());
 }
 
 void SnakeEngine::onLeave(Room& room, ConnId, SeatId seat) {
@@ -237,7 +242,10 @@ std::string SnakeEngine::statusLine() const {
 }
 
 void SnakeEngine::addAi(snake::NavType nav) {
-    world_.add(nextAiId_++, true, nav);
+    // Only advance the id on a successful add, so ids don't skip if the board is full.
+    if (world_.add(nextAiId_, true, nav)) {
+        ++nextAiId_;
+    }
 }
 
 void SnakeEngine::removeLastAi() {

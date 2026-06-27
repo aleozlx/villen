@@ -10,7 +10,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Villen · snake</title>
     <style>
       :root { color-scheme: dark; }
@@ -19,7 +19,7 @@
       body {
         font: 16px/1.4 system-ui, sans-serif; background: #0d1016; color: #e8edf2;
         display: flex; flex-direction: column; align-items: center;
-        gap: 8px; padding: 10px; overflow: hidden; touch-action: none;
+        gap: 8px; padding: 10px; overflow: hidden;
         -webkit-user-select: none; user-select: none;
       }
       header { display: flex; align-items: baseline; gap: 10px; }
@@ -41,6 +41,7 @@
       .dpad button {
         font-size: 26px; border: none; border-radius: 12px; background: #1b2430;
         color: #cdd9e5; cursor: pointer; -webkit-tap-highlight-color: transparent;
+        touch-action: none;  /* a button tap steers; it shouldn't pan/zoom the page */
       }
       .dpad button:active { background: #2b3a4d; }
       .dpad .up    { grid-area: 1 / 2; }

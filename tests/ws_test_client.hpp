@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -122,21 +123,25 @@ class WsClient {
     // whether or not anyone acts); this fixed window is the right tool there.
     std::vector<std::string> collect(int totalMs) {
         std::vector<std::string> out;
-        timeval start{};
-        ::gettimeofday(&start, nullptr);
-        auto elapsedMs = [&]() {
-            timeval now{};
-            ::gettimeofday(&now, nullptr);
-            return static_cast<int>((now.tv_sec - start.tv_sec) * 1000 +
-                                    (now.tv_usec - start.tv_usec) / 1000);
-        };
+        // steady_clock, not wall time: a backward NTP/VM clock step must never
+        // extend the window past totalMs (monotonic by construction).
+        const auto start = std::chrono::steady_clock::now();
         for (;;) {
-            int remaining = totalMs - elapsedMs();
-            if (remaining <= 0) break;
+            const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - start)
+                                     .count();
+            const int remaining = totalMs - static_cast<int>(elapsed);
+            if (remaining <= 0) {
+                break;
+            }
             std::string payload;
             bool isText = false;
-            if (!recvFrame(remaining, payload, isText)) break;  // timeout / closed
-            if (isText) out.push_back(std::move(payload));
+            if (!recvFrame(remaining, payload, isText)) {
+                break;  // timeout / closed
+            }
+            if (isText) {
+                out.push_back(std::move(payload));
+            }
         }
         return out;
     }
